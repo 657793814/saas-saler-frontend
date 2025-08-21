@@ -1,7 +1,6 @@
 // router/index.js
 import {createRouter, createWebHistory} from 'vue-router'
 import Login from '@/components/Login.vue'
-import UserManagement from '@/views/UserManagement.vue'
 
 const routes = [
     {
@@ -17,21 +16,22 @@ const routes = [
     {
         path: '/dashboard',
         name: 'Dashboard',
-        component: () => import('@/views/Dashboard.vue'), // 需要创建这个组件
+        component: () => import('@/views/Dashboard.vue'),
         meta: {requiresAuth: true}
     },
     {
         path: '/users',
         name: 'UserManagement',
-        component: UserManagement,
-        meta: {requiresAuth: true}
+        component: () => import('@/views/UserManagement.vue'),
+        meta: {requiresAuth: true, roles: ['admin']}
     },
     {
         path: '/settings',
         name: 'Settings',
-        component: () => import('@/views/Settings.vue'), // 需要创建这个组件
-        meta: {requiresAuth: true}
-    }
+        component: () => import('@/views/Settings.vue'),
+        meta: {requiresAuth: true, roles: ['admin']}
+    },
+    // 可以添加更多路由...
 ]
 
 const router = createRouter({

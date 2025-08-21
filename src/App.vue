@@ -2,7 +2,7 @@
 <template>
   <div id="app">
     <!-- Toast 提示组件 -->
-    <Toast ref="toast"/>
+    <AppToast ref="toast"/>
 
     <!-- 消息框组件 -->
     <MessageBox
@@ -34,23 +34,29 @@
 
         <nav class="sidebar-nav">
           <ul>
-            <li>
-              <router-link to="/dashboard" active-class="active">
-                <i class="icon-dashboard"></i>
-                <span v-if="!sidebarCollapsed">仪表盘</span>
+            <li v-for="menu in filteredMenus" :key="menu.id">
+              <router-link
+                  :to="menu.path"
+                  active-class="active"
+                  :title="menu.name"
+              >
+                <i :class="menu.icon"></i>
+                <span v-if="!sidebarCollapsed">{{ menu.name }}</span>
               </router-link>
-            </li>
-            <li>
-              <router-link to="/users" active-class="active">
-                <i class="icon-users"></i>
-                <span v-if="!sidebarCollapsed">用户管理</span>
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/settings" active-class="active">
-                <i class="icon-settings"></i>
-                <span v-if="!sidebarCollapsed">系统设置</span>
-              </router-link>
+
+              <!-- 子菜单 -->
+              <ul v-if="menu.children && menu.children.length > 0 && !sidebarCollapsed" class="submenu">
+                <li v-for="child in menu.children" :key="child.id">
+                  <router-link
+                      :to="child.path"
+                      active-class="active"
+                      :title="child.name"
+                  >
+                    <i :class="child.icon"></i>
+                    <span>{{ child.name }}</span>
+                  </router-link>
+                </li>
+              </ul>
             </li>
           </ul>
         </nav>
@@ -87,14 +93,15 @@
 </template>
 
 <script>
-import Toast from './components/Toast.vue'
-import MessageBox from './components/MessageBox.vue'
+import AppToast from '@/components/Toast.vue'
+import MessageBox from '@/components/MessageBox.vue'
 import fullscreenMixin from '@/mixins/fullscreen';
+import menuService from '@/utils/menuService';
 
 export default {
   name: 'App',
   components: {
-    Toast,
+    AppToast,
     MessageBox
   },
   mixins: [fullscreenMixin],
@@ -104,6 +111,8 @@ export default {
       showUserMenu: false,
       currentUser: {},
       username: '',
+      userRole: 'user', // 默认角色
+      menus: [], // 所有菜单
       // 消息框相关数据
       messageBoxVisible: false,
       messageBoxTitle: '',
@@ -117,7 +126,27 @@ export default {
     }
   },
   computed: {
+    // 过滤后的菜单（根据用户角色）
+    filteredMenus() {
+      return menuService.filterMenuTree(this.menus, this.userRole);
+    },
+
     currentPageTitle() {
+      // 动态获取当前页面标题
+      const currentMenu = this.menus.find(menu =>
+          menu.path === this.$route.path ||
+          (menu.children && menu.children.some(child => child.path === this.$route.path))
+      );
+
+      if (currentMenu) {
+        if (currentMenu.path === this.$route.path) {
+          return currentMenu.name;
+        } else if (currentMenu.children) {
+          const childMenu = currentMenu.children.find(child => child.path === this.$route.path);
+          return childMenu ? childMenu.name : currentMenu.name;
+        }
+      }
+
       const routeMap = {
         '/dashboard': '仪表盘',
         '/users': '用户管理',
@@ -128,6 +157,7 @@ export default {
   },
   mounted() {
     this.loadUserInfo();
+    this.loadUserMenus();
     // 点击其他地方关闭用户菜单
     document.addEventListener('click', this.handleClickOutside);
   },
@@ -187,10 +217,68 @@ export default {
         try {
           this.currentUser = JSON.parse(userInfoStr);
           this.username = this.currentUser.uname || this.currentUser.username || '用户';
+          // 获取用户角色（根据实际返回数据结构调整）
+          this.userRole = this.currentUser.role || this.currentUser.userRole || 'user';
         } catch (e) {
           console.error('解析用户信息失败', e);
         }
       }
+    },
+
+    async loadUserMenus() {
+      try {
+        // 首先尝试从本地存储获取缓存的菜单
+        const cachedMenus = localStorage.getItem('user_menus');
+        if (cachedMenus) {
+          try {
+            this.menus = JSON.parse(cachedMenus);
+            return;
+          } catch (e) {
+            console.error('解析缓存菜单失败', e);
+          }
+        }
+
+        // 如果没有缓存，从服务器获取
+        const menus = await menuService.getUserMenus();
+        if (menus && menus.length > 0) {
+          this.menus = menus;
+        } else {
+          // 如果获取失败，使用默认菜单
+          console.warn('无法获取用户菜单，使用默认菜单');
+          this.menus = this.getDefaultMenus();
+        }
+      } catch (error) {
+        console.error('加载用户菜单失败:', error);
+        // 使用默认菜单
+        this.menus = this.getDefaultMenus();
+      }
+    },
+
+    // 获取默认菜单
+    getDefaultMenus() {
+      return [
+        {
+          id: 'dashboard',
+          name: '仪表盘',
+          path: '/dashboard',
+          icon: 'icon-dashboard',
+          roles: ['admin', 'user', 'guest']
+        },
+        {
+          id: 'users',
+          name: '用户管理',
+          path: '/users',
+          icon: 'icon-users',
+          roles: ['admin']
+        },
+        {
+          id: 'settings',
+          name: '系统设置',
+          path: '/settings',
+          icon: 'icon-settings',
+          roles: ['admin']
+        }
+      ];
     },
 
     handleLogout() {
@@ -207,6 +295,10 @@ export default {
           localStorage.removeItem('token');
           localStorage.removeItem('refresh_token');
           localStorage.removeItem('user_info');
+          localStorage.removeItem('user_menus');
+
+          // 清除菜单缓存
+          menuService.clearCache();
 
           // 关闭用户菜单
           this.showUserMenu = false;
@@ -288,6 +380,10 @@ html, body {
 }
 
 .sidebar-nav li {
+  margin: 0;
+}
+
+.sidebar-nav > ul > li {
   margin: 5px 0;
 }
 
@@ -308,10 +404,25 @@ html, body {
 }
 
 .sidebar-nav i {
-  margin-right: 15px;
   font-size: 1.2rem;
   width: 24px;
   text-align: center;
+  margin-right: 15px;
+}
+
+/* 子菜单样式 */
+.submenu {
+  padding-left: 0;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.submenu li {
+  margin: 0;
+}
+
+.submenu a {
+  padding: 12px 20px 12px 54px;
+  font-size: 0.9rem;
 }
 
 /* 主内容区域 */
@@ -415,77 +526,6 @@ html, body {
   font-size: 1.1rem;
 }
 
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .topbar {
-    padding: 0 15px;
-  }
-
-  .topbar-right {
-    gap: 10px;
-  }
-
-  .user-info {
-    padding: 6px 12px;
-  }
-
-  .username {
-    display: none; /* 在小屏幕上隐藏用户名，只显示头像 */
-  }
-
-  .avatar {
-    width: 30px;
-    height: 30px;
-  }
-
-  .logout-btn span {
-    display: none; /* 在小屏幕上只显示图标 */
-  }
-
-  .logout-btn::before {
-    margin-right: 0;
-  }
-}
-
-/* 用户下拉菜单 */
-.user-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  width: 180px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  margin-top: 10px;
-  overflow: hidden;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-
-.dropdown-item:hover {
-  background: #f5f5f5;
-}
-
-.dropdown-item i {
-  margin-right: 10px;
-  font-size: 1.1rem;
-}
-
-/* 主内容区域 */
-.main-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  background: #f8f9fa;
-}
-
 /* 图标样式 */
 .icon-dashboard::before {
   content: "📊";
@@ -499,8 +539,24 @@ html, body {
   content: "⚙️";
 }
 
-.icon-logout::before {
-  content: "🚪";
+.icon-profile::before {
+  content: "👤";
+}
+
+.icon-home::before {
+  content: "🏠";
+}
+
+.icon-report::before {
+  content: "📈";
+}
+
+.icon-document::before {
+  content: "📄";
+}
+
+.icon-message::before {
+  content: "💬";
 }
 
 /* 响应式设计 */
@@ -518,6 +574,35 @@ html, body {
 
   .main-wrapper {
     margin-left: 0;
+  }
+
+  .topbar {
+    padding: 0 15px;
+  }
+
+  .topbar-right {
+    gap: 10px;
+  }
+
+  .user-info {
+    padding: 6px 12px;
+  }
+
+  .username {
+    display: none;
+  }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .logout-btn span {
+    display: none;
+  }
+
+  .logout-btn::before {
+    margin-right: 0;
   }
 }
 </style>

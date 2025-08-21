@@ -80,14 +80,29 @@
 </template>
 
 <!-- Login.vue -->
+<!-- Login.vue -->
+<!-- Login.vue -->
 <script>
 import CryptoJS from 'crypto-js'
 import notify from '@/utils/notify'
+import menuService from '@/utils/menuService'
 
 export default {
   name: 'LoginView',
   data() {
     return {
+      // 背景图片数组
+      backgroundImages: [
+        'https://images.unsplash.com/photo-1506744038136-46273834b3fb?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
+        'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
+        'https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
+        'https://images.unsplash.com/photo-1511497584788-876760111969?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
+        'https://images.unsplash.com/photo-1476820865390-c52aeebb9891?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80'
+      ],
+      currentSlide: 0,
+      slideInterval: null,
+      slideDuration: 5000, // 5秒切换一次
+
       loginForm: {
         login_type: 1,
         username: '',
@@ -98,7 +113,45 @@ export default {
       errorMessage: ''
     }
   },
+
+  mounted() {
+    this.startSlideShow();
+  },
+
+  beforeUnmount() {
+    this.stopSlideShow();
+  },
+
   methods: {
+    startSlideShow() {
+      this.slideInterval = setInterval(() => {
+        this.nextSlide();
+      }, this.slideDuration);
+    },
+
+    stopSlideShow() {
+      if (this.slideInterval) {
+        clearInterval(this.slideInterval);
+        this.slideInterval = null;
+      }
+    },
+
+    nextSlide() {
+      this.currentSlide = (this.currentSlide + 1) % this.backgroundImages.length;
+    },
+
+    prevSlide() {
+      this.currentSlide = (this.currentSlide - 1 + this.backgroundImages.length) % this.backgroundImages.length;
+    },
+
+    // 补全缺失的 goToSlide 方法
+    goToSlide(index) {
+      this.currentSlide = index;
+      // 重置计时器
+      this.stopSlideShow();
+      this.startSlideShow();
+    },
+
     async handleLogin() {
       this.loading = true;
       this.errorMessage = '';
@@ -128,12 +181,17 @@ export default {
         const result = await response.json();
 
         if (response.ok && result.code === 0) {
+          // 保存用户信息
           localStorage.setItem('token', result.data.token);
           localStorage.setItem('refresh_token', result.data.refresh_token);
           localStorage.setItem('user_info', JSON.stringify(result.data.user_info));
           localStorage.setItem('rand_str', result.data.rand_str);
           localStorage.setItem('tenant_code', this.loginForm.tenant_code);
 
+          // 获取用户菜单
+          await this.loadUserMenus();
+
+          // 跳转到主页面
           this.$router.push('/dashboard');
         } else {
           this.errorMessage = result.msg || '登录失败';
@@ -148,12 +206,30 @@ export default {
       }
     },
 
+    async loadUserMenus() {
+      try {
+        // 获取用户菜单
+        const menus = await menuService.getUserMenus();
+
+        // 如果获取失败，使用默认菜单
+        if (!menus || menus.length === 0) {
+          console.warn('无法获取用户菜单，使用默认菜单');
+        }
+
+        // 保存菜单到本地存储（可选）
+        localStorage.setItem('user_menus', JSON.stringify(menus || []));
+      } catch (error) {
+        console.error('加载用户菜单失败:', error);
+      }
+    },
+
     encryptPassword(password) {
       return CryptoJS.MD5(password).toString();
     }
   }
 }
 </script>
+
 
 <style scoped>/* 全局样式：确保全屏且无滚动 */
 html, body {
