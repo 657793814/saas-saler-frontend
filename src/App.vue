@@ -71,7 +71,9 @@
             </div>
 
             <!-- 退出登录按钮 -->
-            <button class="logout-btn" @click="handleLogout">退出</button>
+            <button class="logout-btn" @click="handleLogout">
+              <span>退出</span>
+            </button>
           </div>
         </header>
 
@@ -85,15 +87,33 @@
 </template>
 
 <script>
+import Toast from './components/Toast.vue'
+import MessageBox from './components/MessageBox.vue'
+import fullscreenMixin from '@/mixins/fullscreen';
+
 export default {
   name: 'App',
+  components: {
+    Toast,
+    MessageBox
+  },
+  mixins: [fullscreenMixin],
   data() {
     return {
       sidebarCollapsed: false,
       showUserMenu: false,
       currentUser: {},
-      username: ''
-
+      username: '',
+      // 消息框相关数据
+      messageBoxVisible: false,
+      messageBoxTitle: '',
+      messageBoxMessage: '',
+      messageBoxType: 'info',
+      messageBoxShowCancel: false,
+      messageBoxConfirmText: '确定',
+      messageBoxCancelText: '取消',
+      messageBoxCallback: null,
+      messageBoxCancelCallback: null
     }
   },
   computed: {
@@ -107,7 +127,6 @@ export default {
     }
   },
   mounted() {
-
     this.loadUserInfo();
     // 点击其他地方关闭用户菜单
     document.addEventListener('click', this.handleClickOutside);
@@ -116,6 +135,37 @@ export default {
     document.removeEventListener('click', this.handleClickOutside);
   },
   methods: {
+    // 显示 Toast 提示
+    showToast(message, type = 'info', duration = 3000) {
+      this.$refs.toast.show(message, type, duration);
+    },
+
+    // 显示消息框
+    showMessageBox(options) {
+      this.messageBoxTitle = options.title || '提示';
+      this.messageBoxMessage = options.message || '';
+      this.messageBoxType = options.type || 'info';
+      this.messageBoxShowCancel = options.showCancel || false;
+      this.messageBoxConfirmText = options.confirmText || '确定';
+      this.messageBoxCancelText = options.cancelText || '取消';
+      this.messageBoxCallback = options.onConfirm || null;
+      this.messageBoxCancelCallback = options.onCancel || null;
+      this.messageBoxVisible = true;
+    },
+
+    handleMessageBoxConfirm() {
+      this.messageBoxVisible = false;
+      if (this.messageBoxCallback) {
+        this.messageBoxCallback();
+      }
+    },
+
+    handleMessageBoxCancel() {
+      this.messageBoxVisible = false;
+      if (this.messageBoxCancelCallback) {
+        this.messageBoxCancelCallback();
+      }
+    },
 
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed;
@@ -144,18 +194,27 @@ export default {
     },
 
     handleLogout() {
-      if (confirm('确定要退出登录吗？')) {
-        // 清除本地存储的用户信息
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_info');
+      // 使用全局消息框替代原生 confirm
+      this.showMessageBox({
+        title: '确认退出',
+        message: '确定要退出登录吗？',
+        type: 'warning',
+        showCancel: true,
+        confirmText: '退出登录',
+        cancelText: '取消',
+        onConfirm: () => {
+          // 清除本地存储的用户信息
+          localStorage.removeItem('token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user_info');
 
-        // 关闭用户菜单
-        this.showUserMenu = false;
+          // 关闭用户菜单
+          this.showUserMenu = false;
 
-        // 跳转到登录页面
-        this.$router.push('/');
-      }
+          // 跳转到登录页面
+          this.$router.push('/');
+        }
+      });
     }
   }
 }
@@ -350,10 +409,9 @@ html, body {
   transform: translateY(0);
 }
 
-/* 退出图标 */
 .logout-btn::before {
   content: "🚪";
-  margin-right: 0px;
+  margin-right: 8px;
   font-size: 1.1rem;
 }
 

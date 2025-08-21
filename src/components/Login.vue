@@ -79,24 +79,15 @@
   </div>
 </template>
 
-<script>import CryptoJS from 'crypto-js'
+<!-- Login.vue -->
+<script>
+import CryptoJS from 'crypto-js'
+import notify from '@/utils/notify'
 
 export default {
   name: 'LoginView',
   data() {
     return {
-      // 更明亮、更大气的背景图片
-      backgroundImages: [
-        'https://images.unsplash.com/photo-1506744038136-46273834b3fb?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
-        'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
-        'https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
-        'https://images.unsplash.com/photo-1511497584788-876760111969?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80',
-        'https://images.unsplash.com/photo-1476820865390-c52aeebb9891?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1920&h=1080&q=80'
-      ],
-      currentSlide: 0,
-      slideInterval: null,
-      slideDuration: 5000, // 5秒切换一次
-
       loginForm: {
         login_type: 1,
         username: '',
@@ -107,78 +98,7 @@ export default {
       errorMessage: ''
     }
   },
-
-  mounted() {
-    this.startSlideShow();
-    // 禁止页面滚动
-    this.disableScroll();
-    // 检查是否已经登录
-    this.checkLoggedInUser();
-  },
-
-  beforeUnmount() {
-    this.stopSlideShow();
-    // 恢复页面滚动
-    this.enableScroll();
-  },
-
   methods: {
-    startSlideShow() {
-      this.slideInterval = setInterval(() => {
-        this.nextSlide();
-      }, this.slideDuration);
-    },
-
-    stopSlideShow() {
-      if (this.slideInterval) {
-        clearInterval(this.slideInterval);
-        this.slideInterval = null;
-      }
-    },
-
-    nextSlide() {
-      this.currentSlide = (this.currentSlide + 1) % this.backgroundImages.length;
-    },
-
-    prevSlide() {
-      this.currentSlide = (this.currentSlide - 1 + this.backgroundImages.length) % this.backgroundImages.length;
-    },
-
-    goToSlide(index) {
-      this.currentSlide = index;
-      // 重置计时器
-      this.stopSlideShow();
-      this.startSlideShow();
-    },
-
-    disableScroll() {
-      // 禁止滚动
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-    },
-
-    enableScroll() {
-      // 恢复滚动
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-    },
-
-    checkLoggedInUser() {
-      // 检查本地存储中是否有用户信息
-      const userInfoStr = localStorage.getItem('user_info');
-      if (userInfoStr) {
-        try {
-          const userInfo = JSON.parse(userInfoStr);
-          if (userInfo && userInfo.uname) {
-            // 如果已经登录，直接跳转到主页面
-            this.$router.push('/dashboard');
-          }
-        } catch (e) {
-          console.error('解析用户信息失败', e);
-        }
-      }
-    },
-
     async handleLogin() {
       this.loading = true;
       this.errorMessage = '';
@@ -201,7 +121,6 @@ export default {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
-            // 注意：登录接口通常不需要Authorization头
           },
           body: JSON.stringify(requestData)
         });
@@ -209,18 +128,20 @@ export default {
         const result = await response.json();
 
         if (response.ok && result.code === 0) {
-          // 登录成功处理
           localStorage.setItem('token', result.data.token);
           localStorage.setItem('refresh_token', result.data.refresh_token);
           localStorage.setItem('user_info', JSON.stringify(result.data.user_info));
+          localStorage.setItem('rand_str', result.data.rand_str);
+          localStorage.setItem('tenant_code', this.loginForm.tenant_code);
 
-          // 跳转到主页面
           this.$router.push('/dashboard');
         } else {
           this.errorMessage = result.msg || '登录失败';
+          notify.error(result.msg || '登录失败');
         }
       } catch (error) {
         this.errorMessage = '网络错误，请稍后重试';
+        notify.error('网络错误，请稍后重试');
         console.error('登录请求失败:', error);
       } finally {
         this.loading = false;

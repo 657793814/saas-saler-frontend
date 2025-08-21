@@ -14,22 +14,22 @@
         <table class="data-table">
           <thead>
           <tr>
-            <th>ID</th>
+            <th>用户编码</th>
             <th>用户名</th>
-            <th>邮箱</th>
-            <th>角色</th>
+            <th>手机号</th>
+            <th>状态</th>
             <th>操作</th>
           </tr>
           </thead>
           <tbody>
-          <tr v-for="user in users" :key="user.id">
-            <td>{{ user.id }}</td>
-            <td>{{ user.username }}</td>
-            <td>{{ user.email }}</td>
+          <tr v-for="user in users" :key="user.openid">
+            <td>{{ user.userCode }}</td>
+            <td>{{ user.userName }}</td>
+            <td>{{ user.mobile }}</td>
             <td>
-                <span class="role-tag" :class="getRoleClass(user.role)">
-                  {{ user.role }}
-                </span>
+              <span class="status-tag" :class="{ active: user.enable === 1 }">
+                {{ user.enable === 1 ? '启用' : '禁用' }}
+              </span>
             </td>
             <td>
               <div class="action-buttons">
@@ -37,15 +37,78 @@
                   <i class="icon-edit"></i>
                   编辑
                 </button>
-                <button class="btn-delete" @click="deleteUser(user.id)">
-                  <i class="icon-delete"></i>
-                  删除
-                </button>
+                <!-- 启用/禁用开关 -->
+                <label class="switch">
+                  <input
+                      type="checkbox"
+                      :checked="user.enable === 1"
+                      @change="toggleUserStatus(user)"
+                  >
+                  <span class="slider"></span>
+                </label>
+                <span class="status-text">{{ user.enable === 1 ? '启用' : '禁用' }}</span>
               </div>
             </td>
           </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- 分页组件 -->
+      <div class="pagination-container" v-if="pagination.total > 0">
+        <div class="pagination-info">
+          共 {{ pagination.total }} 条记录，第 {{ pagination.current }} / {{ pagination.pages }} 页
+        </div>
+        <div class="pagination-controls">
+          <!-- 跳转到首页 -->
+          <button
+              class="btn-pagination"
+              :disabled="pagination.current === 1"
+              @click="loadUsers(1)"
+          >
+            首页
+          </button>
+
+          <!-- 上一页 -->
+          <button
+              class="btn-pagination"
+              :disabled="pagination.current === 1"
+              @click="loadUsers(pagination.current - 1)"
+          >
+            上一页
+          </button>
+
+          <!-- 页码输入框 -->
+          <div class="page-jump">
+            <input
+                type="number"
+                v-model="jumpPage"
+                :min="1"
+                :max="pagination.pages"
+                class="page-input"
+                @keyup.enter="jumpToPage"
+            />
+            <button class="btn-jump" @click="jumpToPage">跳转</button>
+          </div>
+
+          <!-- 下一页 -->
+          <button
+              class="btn-pagination"
+              :disabled="pagination.current === pagination.pages"
+              @click="loadUsers(pagination.current + 1)"
+          >
+            下一页
+          </button>
+
+          <!-- 跳转到末页 -->
+          <button
+              class="btn-pagination"
+              :disabled="pagination.current === pagination.pages"
+              @click="loadUsers(pagination.pages)"
+          >
+            末页
+          </button>
+        </div>
       </div>
     </div>
 
@@ -59,33 +122,55 @@
 
         <form @submit.prevent="saveUser" class="modal-body">
           <div class="form-group">
-            <label for="username">用户名</label>
+            <label for="userCode">用户编码</label>
             <input
                 type="text"
-                id="username"
-                v-model="currentUser.username"
+                id="userCode"
+                v-model="currentUser.userCode"
+                required
+                placeholder="请输入用户编码"
+                :disabled="isEdit"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="userName">用户名</label>
+            <input
+                type="text"
+                id="userName"
+                v-model="currentUser.userName"
                 required
                 placeholder="请输入用户名"
             >
           </div>
 
           <div class="form-group">
-            <label for="email">邮箱</label>
+            <label for="mobile">手机号</label>
             <input
-                type="email"
-                id="email"
-                v-model="currentUser.email"
+                type="tel"
+                id="mobile"
+                v-model="currentUser.mobile"
                 required
-                placeholder="请输入邮箱"
+                placeholder="请输入手机号"
             >
           </div>
 
           <div class="form-group">
-            <label for="role">角色</label>
-            <select id="role" v-model="currentUser.role" required>
-              <option value="管理员">管理员</option>
-              <option value="普通用户">普通用户</option>
-              <option value="访客">访客</option>
+            <label for="password">密码</label>
+            <input
+                type="password"
+                id="password"
+                v-model="currentUser.password"
+                :required="!isEdit"
+                placeholder="请输入密码"
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="enable">状态</label>
+            <select id="enable" v-model="currentUser.enable" required>
+              <option :value="1">启用</option>
+              <option :value="0">禁用</option>
             </select>
           </div>
 
@@ -101,50 +186,160 @@
   </div>
 </template>
 
+<!-- UserManagement.vue -->
 <script>
+import apiRequest from '@/utils/request';
+import notify from '@/utils/notify';
+import CryptoJS from "crypto-js";
+
 export default {
   name: 'UserManagement',
   data() {
     return {
-      users: [
-        {id: 1, username: 'admin', email: 'admin@example.com', role: '管理员'},
-        {id: 2, username: 'user1', email: 'user1@example.com', role: '普通用户'},
-        {id: 3, username: 'user2', email: 'user2@example.com', role: '普通用户'}
-      ],
+      users: [],
       showModal: false,
       isEdit: false,
       currentUser: {
-        id: null,
-        username: '',
-        email: '',
-        role: '普通用户'
-      }
+        openid: '',
+        userCode: '',
+        userName: '',
+        mobile: '',
+        password: '',
+        salt: '',
+        enable: 1
+      },
+      originalUser: null,
+      pagination: {
+        total: 0,
+        current: 1,
+        size: 10,
+        pages: 0
+      },
+      jumpPage: ''
     }
   },
+
+  mounted() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const page = parseInt(urlParams.get('page')) || 1;
+    this.loadUsers(page);
+  },
+
   methods: {
-    getRoleClass(role) {
-      const roleClasses = {
-        '管理员': 'admin',
-        '普通用户': 'user',
-        '访客': 'guest'
-      };
-      return roleClasses[role] || 'user';
+    async loadUsers(page = 1) {
+      try {
+        this.updateUrl(page);
+
+        const result = await apiRequest.post('/api/user/page', {
+          current: page,
+          size: 10
+        });
+
+        if (result.code === 0) {
+          this.users = result.data.records;
+          this.pagination.total = result.data.total;
+          this.pagination.current = result.data.current;
+          this.pagination.size = result.data.size;
+          this.pagination.pages = Math.ceil(result.data.total / result.data.size);
+          this.jumpPage = page;
+        } else {
+          notify.error('获取用户列表失败: ' + result.msg);
+        }
+      } catch (error) {
+        console.error('获取用户列表错误:', error);
+        notify.error('网络错误，请稍后重试');
+      }
+    },
+
+    updateUrl(page) {
+      const url = new URL(window.location);
+      url.searchParams.set('page', page);
+      window.history.replaceState({}, '', url);
+    },
+
+    jumpToPage() {
+      const page = parseInt(this.jumpPage);
+      if (page && page >= 1 && page <= this.pagination.pages) {
+        this.loadUsers(page);
+      } else {
+        notify.warning(`请输入有效的页码（1-${this.pagination.pages}）`);
+        this.jumpPage = this.pagination.current;
+      }
+    },
+
+    // 切换用户状态
+    async toggleUserStatus(user) {
+      const action = user.enable === 1 ? '禁用' : '启用';
+      const confirmed = await notify.confirm(
+          `确定要${action}用户 ${user.userName} 吗？`,
+          {
+            title: '确认操作',
+            type: 'warning'
+          }
+      );
+
+      if (confirmed) {
+        try {
+          const result = await apiRequest.post('/api/user/edit', {
+            openid: user.openid,
+            enable: user.enable !== 1,
+            userName: user.userName,
+            mobile: user.mobile
+          });
+
+          if (result.code === 0) {
+            const index = this.users.findIndex(u => u.openid === user.openid);
+            if (index !== -1) {
+              this.users[index].enable = user.enable !== 1 ? 1 : 0;
+            }
+            notify.success(`${action}用户成功`);
+          } else {
+            notify.error('更新用户状态失败: ' + result.msg);
+            const index = this.users.findIndex(u => u.openid === user.openid);
+            if (index !== -1) {
+              this.users[index].enable = user.enable;
+            }
+          }
+        } catch (error) {
+          console.error('更新用户状态错误:', error);
+          notify.error('网络错误，请稍后重试');
+          const index = this.users.findIndex(u => u.openid === user.openid);
+          if (index !== -1) {
+            this.users[index].enable = user.enable;
+          }
+        }
+      } else {
+        const index = this.users.findIndex(u => u.openid === user.openid);
+        if (index !== -1) {
+          this.users[index].enable = user.enable;
+        }
+      }
+    },
+
+    md5Encrypt(password) {
+      return CryptoJS.MD5(password).toString();
     },
 
     openAddModal() {
       this.isEdit = false;
       this.currentUser = {
-        id: null,
-        username: '',
-        email: '',
-        role: '普通用户'
+        openid: '',
+        userCode: '',
+        userName: '',
+        mobile: '',
+        password: '',
+        salt: '',
+        enable: 1
       };
+      this.originalUser = null;
       this.showModal = true;
     },
 
     openEditModal(user) {
       this.isEdit = true;
+      this.originalUser = {...user};
       this.currentUser = {...user};
+      this.currentUser.password = '';
       this.showModal = true;
     },
 
@@ -152,30 +347,48 @@ export default {
       this.showModal = false;
     },
 
-    saveUser() {
-      if (this.isEdit) {
-        // 更新用户
-        const index = this.users.findIndex(u => u.id === this.currentUser.id);
-        if (index !== -1) {
-          this.users.splice(index, 1, {...this.currentUser});
-        }
-      } else {
-        // 添加新用户
-        const newId = Math.max(...this.users.map(u => u.id)) + 1;
-        this.users.push({
-          id: newId,
-          ...this.currentUser
-        });
-      }
-      this.closeModal();
-    },
+    async saveUser() {
+      try {
+        let result;
 
-    deleteUser(id) {
-      if (confirm('确定要删除这个用户吗？')) {
-        const index = this.users.findIndex(u => u.id === id);
-        if (index !== -1) {
-          this.users.splice(index, 1);
+        if (this.isEdit) {
+          let passwordToSend = '';
+          if (this.currentUser.password && this.currentUser.password !== '') {
+            const originalPasswordMd5 = this.originalUser.password;
+            const newPasswordMd5 = this.md5Encrypt(this.currentUser.password);
+
+            if (originalPasswordMd5 !== newPasswordMd5) {
+              passwordToSend = this.currentUser.password;
+            }
+          }
+
+          result = await apiRequest.post('/api/user/edit', {
+            openid: this.currentUser.openid,
+            enable: this.currentUser.enable === 1,
+            userName: this.currentUser.userName,
+            mobile: this.currentUser.mobile,
+            password: passwordToSend
+          });
+        } else {
+          result = await apiRequest.post('/api/user/add', {
+            user_code: this.currentUser.userCode,
+            user_name: this.currentUser.userName,
+            mobile: this.currentUser.mobile,
+            password: this.currentUser.password,
+            enable: this.currentUser.enable === 1
+          });
         }
+
+        if (result.code === 0) {
+          this.closeModal();
+          this.loadUsers(this.pagination.current);
+          notify.success(this.isEdit ? '更新用户成功' : '添加用户成功');
+        } else {
+          notify.error('保存用户失败: ' + result.msg);
+        }
+      } catch (error) {
+        console.error('保存用户错误:', error);
+        notify.error('网络错误，请稍后重试');
       }
     }
   }
@@ -231,10 +444,14 @@ export default {
   border-radius: 10px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 70px);
 }
 
 .table-container {
   overflow-x: auto;
+  flex: 1;
 }
 
 .data-table {
@@ -262,34 +479,30 @@ export default {
   background-color: #f8f9fa;
 }
 
-.role-tag {
+.status-tag {
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 0.85rem;
   font-weight: 500;
 }
 
-.role-tag.admin {
-  background-color: #ffebee;
-  color: #c62828;
-}
-
-.role-tag.user {
+.status-tag.active {
   background-color: #e8f5e9;
   color: #2e7d32;
 }
 
-.role-tag.guest {
-  background-color: #fff8e1;
-  color: #f9a825;
+.status-tag:not(.active) {
+  background-color: #ffebee;
+  color: #c62828;
 }
 
 .action-buttons {
   display: flex;
+  align-items: center;
   gap: 10px;
 }
 
-.btn-edit, .btn-delete {
+.btn-edit {
   display: inline-flex;
   align-items: center;
   padding: 8px 15px;
@@ -298,9 +511,6 @@ export default {
   cursor: pointer;
   font-size: 0.9rem;
   transition: all 0.2s;
-}
-
-.btn-edit {
   background-color: #fff3e0;
   color: #ef6c00;
 }
@@ -309,18 +519,124 @@ export default {
   background-color: #ffe0b2;
 }
 
-.btn-delete {
-  background-color: #ffebee;
-  color: #c62828;
-}
-
-.btn-delete:hover {
-  background-color: #ffcdd2;
-}
-
-.btn-edit i, .btn-delete i {
+.btn-edit i {
   margin-right: 5px;
   font-size: 0.9rem;
+}
+
+/* 开关样式 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #27ae60;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
+}
+
+.status-text {
+  font-size: 0.85rem;
+  color: #666;
+  min-width: 30px;
+}
+
+.btn-pagination, .btn-jump {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+  background-color: #f8f9fa;
+  color: #495057;
+}
+
+.btn-pagination:hover:not(:disabled), .btn-jump:hover {
+  background-color: #e9ecef;
+}
+
+.btn-pagination:disabled {
+  background-color: #eee;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-top: 1px solid #eee;
+  background-color: #f8f9fa;
+}
+
+.pagination-info {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.page-input {
+  width: 60px;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.page-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
 /* 模态框样式 */
@@ -413,6 +729,11 @@ export default {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.form-group input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
 }
 
 .modal-footer {
