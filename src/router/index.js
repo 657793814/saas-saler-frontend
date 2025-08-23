@@ -44,6 +44,12 @@ const routes = [
                 meta: {title: '商品管理'}
             },
             {
+                path: 'product-create',
+                name: 'productCreate',
+                component: () => import('@/views/products/ProductCreate.vue'),
+                meta: {title: '添加商品'}
+            },
+            {
                 path: 'specifications',
                 name: 'SpecificationsManage',
                 component: () => import('@/views/products/Specifications.vue'),

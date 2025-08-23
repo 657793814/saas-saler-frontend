@@ -56,10 +56,8 @@ class ApiRequest {
     // 发送请求
     async request(url, options = {}) {
         const {method = 'GET', data = {}, headers = {}, needAuth = true} = options;
-
         // 合并默认头部
         const finalHeaders = {...this.defaultHeaders, ...headers};
-
         let finalUrl = url;
         let finalData = data;
 
