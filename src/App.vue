@@ -2,20 +2,40 @@
 <template>
   <div id="app">
     <!-- Toast 提示组件 -->
-    <AppToast ref="toast"/>
+    <div class="toast-container">
+      <transition-group name="toast" tag="div">
+        <div
+            v-for="toast in toasts"
+            :key="toast.id"
+            class="toast"
+            :class="toast.type"
+        >
+          <i :class="getToastIconClass(toast.type)"></i>
+          <span>{{ toast.message }}</span>
+        </div>
+      </transition-group>
+    </div>
 
-    <!-- 消息框组件 -->
-    <MessageBox
-        :visible="messageBoxVisible"
-        :title="messageBoxTitle"
-        :message="messageBoxMessage"
-        :type="messageBoxType"
-        :show-cancel="messageBoxShowCancel"
-        :confirm-text="messageBoxConfirmText"
-        :cancel-text="messageBoxCancelText"
-        @confirm="handleMessageBoxConfirm"
-        @cancel="handleMessageBoxCancel"
-    />
+    <!-- 确认弹窗组件 -->
+    <div class="modal-overlay" v-if="confirmVisible">
+      <div class="beautiful-modal confirm-modal" :class="confirmType">
+        <div class="modal-header">
+          <div class="modal-icon" :class="confirmType">
+            <i :class="getModalIconClass(confirmType)"></i>
+          </div>
+          <h3>{{ confirmTitle }}</h3>
+        </div>
+        <div class="modal-body">
+          <p>{{ confirmMessage }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="handleConfirmCancel">{{ confirmCancelText }}</button>
+          <button class="btn-confirm" :class="confirmType" @click="handleConfirmConfirm">
+            {{ confirmConfirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- 登录页面单独处理 -->
     <router-view v-if="$route.path === '/' || $route.path === '/login'"></router-view>
@@ -34,7 +54,7 @@
 
         <nav class="sidebar-nav">
           <ul>
-            <li v-for="menu in filteredMenus" :key="menu.id">
+            <li v-for="menu in menus" :key="menu.id">
               <router-link
                   :to="menu.path"
                   active-class="active"
@@ -93,60 +113,33 @@
 </template>
 
 <script>
-import AppToast from '@/components/Toast.vue'
-import MessageBox from '@/components/MessageBox.vue'
-import fullscreenMixin from '@/mixins/fullscreen';
 import menuService from '@/utils/menuService';
+import {menuIconCSS} from '@/config/menus'
 
 export default {
   name: 'App',
-  components: {
-    AppToast,
-    MessageBox
-  },
-  mixins: [fullscreenMixin],
   data() {
     return {
       sidebarCollapsed: false,
-      showUserMenu: false,
       currentUser: {},
       username: '',
-      userRole: 'user', // 默认角色
-      menus: [], // 所有菜单
-      // 消息框相关数据
-      messageBoxVisible: false,
-      messageBoxTitle: '',
-      messageBoxMessage: '',
-      messageBoxType: 'info',
-      messageBoxShowCancel: false,
-      messageBoxConfirmText: '确定',
-      messageBoxCancelText: '取消',
-      messageBoxCallback: null,
-      messageBoxCancelCallback: null
+      userRole: 'user',
+      menus: [],
+      // Toast 相关数据
+      toasts: [],
+      // 确认弹窗相关数据
+      confirmVisible: false,
+      confirmTitle: '',
+      confirmMessage: '',
+      confirmType: 'info',
+      confirmConfirmText: '确定',
+      confirmCancelText: '取消',
+      confirmCallback: null,
+      confirmCancelCallback: null
     }
   },
   computed: {
-    // 过滤后的菜单（根据用户角色）
-    filteredMenus() {
-      return menuService.filterMenuTree(this.menus, this.userRole);
-    },
-
     currentPageTitle() {
-      // 动态获取当前页面标题
-      const currentMenu = this.menus.find(menu =>
-          menu.path === this.$route.path ||
-          (menu.children && menu.children.some(child => child.path === this.$route.path))
-      );
-
-      if (currentMenu) {
-        if (currentMenu.path === this.$route.path) {
-          return currentMenu.name;
-        } else if (currentMenu.children) {
-          const childMenu = currentMenu.children.find(child => child.path === this.$route.path);
-          return childMenu ? childMenu.name : currentMenu.name;
-        }
-      }
-
       const routeMap = {
         '/dashboard': '仪表盘',
         '/users': '用户管理',
@@ -156,59 +149,89 @@ export default {
     }
   },
   mounted() {
+
+    // 动态注入图标样式
+    if (!document.getElementById('menu-icons-style')) {
+      const style = document.createElement('style')
+      style.id = 'menu-icons-style'
+      style.textContent = menuIconCSS
+      document.head.appendChild(style)
+    }
+
     this.loadUserInfo();
     this.loadUserMenus();
-    // 点击其他地方关闭用户菜单
-    document.addEventListener('click', this.handleClickOutside);
-  },
-  beforeUnmount() {
-    document.removeEventListener('click', this.handleClickOutside);
+
   },
   methods: {
-    // 显示 Toast 提示
+    // Toast 相关方法
     showToast(message, type = 'info', duration = 3000) {
-      this.$refs.toast.show(message, type, duration);
+      const id = Date.now() + Math.random();
+      this.toasts.push({
+        id,
+        message,
+        type
+      });
+
+      setTimeout(() => {
+        this.removeToast(id);
+      }, duration);
     },
 
-    // 显示消息框
-    showMessageBox(options) {
-      this.messageBoxTitle = options.title || '提示';
-      this.messageBoxMessage = options.message || '';
-      this.messageBoxType = options.type || 'info';
-      this.messageBoxShowCancel = options.showCancel || false;
-      this.messageBoxConfirmText = options.confirmText || '确定';
-      this.messageBoxCancelText = options.cancelText || '取消';
-      this.messageBoxCallback = options.onConfirm || null;
-      this.messageBoxCancelCallback = options.onCancel || null;
-      this.messageBoxVisible = true;
-    },
-
-    handleMessageBoxConfirm() {
-      this.messageBoxVisible = false;
-      if (this.messageBoxCallback) {
-        this.messageBoxCallback();
+    removeToast(id) {
+      const index = this.toasts.findIndex(toast => toast.id === id);
+      if (index !== -1) {
+        this.toasts.splice(index, 1);
       }
     },
 
-    handleMessageBoxCancel() {
-      this.messageBoxVisible = false;
-      if (this.messageBoxCancelCallback) {
-        this.messageBoxCancelCallback();
+    getToastIconClass(type) {
+      const icons = {
+        info: 'icon-info',
+        success: 'icon-success',
+        warning: 'icon-warning',
+        error: 'icon-error'
+      };
+      return icons[type] || 'icon-info';
+    },
+
+    // 确认弹窗相关方法
+    showConfirm(options) {
+      this.confirmTitle = options.title || '确认';
+      this.confirmMessage = options.message || '';
+      this.confirmType = options.type || 'info';
+      this.confirmConfirmText = options.confirmText || '确定';
+      this.confirmCancelText = options.cancelText || '取消';
+      this.confirmCallback = options.onConfirm || null;
+      this.confirmCancelCallback = options.onCancel || null;
+      this.confirmVisible = true;
+    },
+
+    handleConfirmConfirm() {
+      this.confirmVisible = false;
+      if (this.confirmCallback) {
+        this.confirmCallback();
       }
+    },
+
+    handleConfirmCancel() {
+      this.confirmVisible = false;
+      if (this.confirmCancelCallback) {
+        this.confirmCancelCallback();
+      }
+    },
+
+    getModalIconClass(type) {
+      const icons = {
+        info: 'icon-info',
+        success: 'icon-success',
+        warning: 'icon-warning',
+        error: 'icon-error'
+      };
+      return icons[type] || 'icon-info';
     },
 
     toggleSidebar() {
       this.sidebarCollapsed = !this.sidebarCollapsed;
-    },
-
-    toggleUserMenu() {
-      this.showUserMenu = !this.showUserMenu;
-    },
-
-    handleClickOutside(event) {
-      if (!event.target.closest('.user-profile') && !event.target.closest('.user-dropdown')) {
-        this.showUserMenu = false;
-      }
     },
 
     loadUserInfo() {
@@ -217,8 +240,6 @@ export default {
         try {
           this.currentUser = JSON.parse(userInfoStr);
           this.username = this.currentUser.uname || this.currentUser.username || '用户';
-          // 获取用户角色（根据实际返回数据结构调整）
-          this.userRole = this.currentUser.role || this.currentUser.userRole || 'user';
         } catch (e) {
           console.error('解析用户信息失败', e);
         }
@@ -242,52 +263,18 @@ export default {
         const menus = await menuService.getUserMenus();
         if (menus && menus.length > 0) {
           this.menus = menus;
-        } else {
-          // 如果获取失败，使用默认菜单
-          console.warn('无法获取用户菜单，使用默认菜单');
-          this.menus = this.getDefaultMenus();
         }
       } catch (error) {
         console.error('加载用户菜单失败:', error);
-        // 使用默认菜单
-        this.menus = this.getDefaultMenus();
       }
     },
 
-    // 获取默认菜单
-    getDefaultMenus() {
-      return [
-        {
-          id: 'dashboard',
-          name: '仪表盘',
-          path: '/dashboard',
-          icon: 'icon-dashboard',
-          roles: ['admin', 'user', 'guest']
-        },
-        {
-          id: 'users',
-          name: '用户管理',
-          path: '/users',
-          icon: 'icon-users',
-          roles: ['admin']
-        },
-        {
-          id: 'settings',
-          name: '系统设置',
-          path: '/settings',
-          icon: 'icon-settings',
-          roles: ['admin']
-        }
-      ];
-    },
-
     handleLogout() {
-      // 使用全局消息框替代原生 confirm
-      this.showMessageBox({
+      // 使用全局统一的确认弹窗
+      this.showConfirm({
         title: '确认退出',
         message: '确定要退出登录吗？',
         type: 'warning',
-        showCancel: true,
         confirmText: '退出登录',
         cancelText: '取消',
         onConfirm: () => {
@@ -296,12 +283,11 @@ export default {
           localStorage.removeItem('refresh_token');
           localStorage.removeItem('user_info');
           localStorage.removeItem('user_menus');
+          localStorage.removeItem('rand_str');
+          localStorage.removeItem('tenant_code');
 
           // 清除菜单缓存
           menuService.clearCache();
-
-          // 关闭用户菜单
-          this.showUserMenu = false;
 
           // 跳转到登录页面
           this.$router.push('/');
@@ -312,7 +298,7 @@ export default {
 }
 </script>
 
-<style scoped>
+<style>
 /* 全局样式：确保全屏且无滚动 */
 html, body {
   height: 100%;
@@ -324,11 +310,246 @@ html, body {
 #app {
   height: 100vh;
   overflow: hidden;
+  font-family: 'Arial', sans-serif;
+}
+</style>
+
+<style scoped>
+/* Toast 样式 */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 3000;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideInRight 0.3s ease-out;
+  min-width: 250px;
+  color: white;
+  font-weight: 500;
+}
+
+.toast.info {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+}
+
+.toast.success {
+  background: linear-gradient(135deg, #27ae60, #219653);
+}
+
+.toast.warning {
+  background: linear-gradient(135deg, #f39c12, #e67e22);
+}
+
+.toast.error {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.toast i {
+  margin-right: 10px;
+  font-size: 1.2rem;
+}
+
+.toast.toast-enter-active, .toast.toast-leave-active {
+  transition: all 0.3s;
+}
+
+.toast.toast-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.toast.toast-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* 图标样式 */
+.icon-info::before {
+  content: "ℹ️";
+}
+
+.icon-success::before {
+  content: "✅";
+}
+
+.icon-warning::before {
+  content: "⚠️";
+}
+
+.icon-error::before {
+  content: "❌";
+}
+
+/* 确认弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.beautiful-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 400px;
+  overflow: hidden;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  padding: 20px 20px 10px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  font-size: 1.2rem;
+}
+
+.modal-icon.info {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  color: white;
+}
+
+.modal-icon.success {
+  background: linear-gradient(135deg, #27ae60, #219653);
+  color: white;
+}
+
+.modal-icon.warning {
+  background: linear-gradient(135deg, #f39c12, #e67e22);
+  color: white;
+}
+
+.modal-icon.error {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: white;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: 20px 25px;
+}
+
+.modal-body p {
+  margin: 0;
+  color: #555;
+  line-height: 1.6;
+  font-size: 1rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 15px 25px 25px 25px;
+}
+
+.btn-confirm, .btn-cancel {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.3s;
+  min-width: 80px;
+}
+
+.btn-cancel {
+  background: #95a5a6;
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: #7f8c8d;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.btn-confirm {
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-confirm.info {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+}
+
+.btn-confirm.success {
+  background: linear-gradient(135deg, #27ae60, #219653);
+}
+
+.btn-confirm.warning {
+  background: linear-gradient(135deg, #f39c12, #e67e22);
+}
+
+.btn-confirm.error {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.btn-confirm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
 .app-layout {
   display: flex;
   height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 
 /* 侧边栏样式 */
@@ -341,6 +562,7 @@ html, body {
   flex-direction: column;
   box-shadow: 3px 0 10px rgba(0, 0, 0, 0.1);
   z-index: 100;
+  flex-shrink: 0;
 }
 
 .sidebar.collapsed {
@@ -443,6 +665,7 @@ html, body {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   padding: 0 20px;
   z-index: 99;
+  flex-shrink: 0;
 }
 
 .topbar-left h1 {
@@ -526,6 +749,14 @@ html, body {
   font-size: 1.1rem;
 }
 
+/* 主内容区域 */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f8f9fa;
+}
+
 /* 图标样式 */
 .icon-dashboard::before {
   content: "📊";
@@ -603,6 +834,26 @@ html, body {
 
   .logout-btn::before {
     margin-right: 0;
+  }
+
+  /* 移动端 Toast 和弹窗适配 */
+  .toast-container {
+    right: 10px;
+    left: 10px;
+  }
+
+  .beautiful-modal {
+    margin: 20px;
+    width: calc(100% - 40px);
+  }
+
+  .modal-footer {
+    flex-direction: column;
+    padding: 15px 20px 20px 20px;
+  }
+
+  .btn-confirm, .btn-cancel {
+    width: 100%;
   }
 }
 </style>

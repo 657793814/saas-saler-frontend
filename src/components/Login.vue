@@ -79,9 +79,6 @@
   </div>
 </template>
 
-<!-- Login.vue -->
-<!-- Login.vue -->
-<!-- Login.vue -->
 <script>
 import CryptoJS from 'crypto-js'
 import notify from '@/utils/notify'
@@ -191,8 +188,8 @@ export default {
           // 获取用户菜单
           await this.loadUserMenus();
 
-          // 跳转到主页面
-          this.$router.push('/dashboard');
+          // 安全的路由跳转方式
+          this.safeNavigateToDashboard();
         } else {
           this.errorMessage = result.msg || '登录失败';
           notify.error(result.msg || '登录失败');
@@ -225,13 +222,32 @@ export default {
 
     encryptPassword(password) {
       return CryptoJS.MD5(password).toString();
+    },
+
+    // 安全的路由跳转方法
+    safeNavigateToDashboard() {
+      try {
+        // 首先检查路由是否存在
+        const dashboardRoute = this.$router.resolve('/dashboard');
+        if (dashboardRoute && dashboardRoute.href) {
+          this.$router.push('/dashboard').catch(err => {
+            console.warn('Vue Router 跳转失败:', err);
+            window.location.href = '/dashboard';
+          });
+        } else {
+          window.location.href = '/dashboard';
+        }
+      } catch (error) {
+        console.error('路由跳转出错:', error);
+        window.location.href = '/dashboard';
+      }
     }
   }
 }
 </script>
 
-
-<style scoped>/* 全局样式：确保全屏且无滚动 */
+<style scoped>
+/* 全局样式：确保全屏且无滚动 */
 html, body {
   height: 100%;
   margin: 0;

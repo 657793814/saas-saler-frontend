@@ -43,7 +43,7 @@
 
 <script>
 export default {
-  name: 'MainLayout'
+  name: 'SystemManageLayout'
 }
 </script>
 
