@@ -44,6 +44,7 @@
             <!-- 对于 admin 角色不显示启用/禁用开关 -->
             <template v-if="scope.row.name !== 'admin'">
               <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+              <el-button size="small" @click="handlePermission(scope.row)" style="margin-left: 10px">权限</el-button>
               <el-switch
                   :model-value="scope.row.enable"
                   :active-value="1"
@@ -116,6 +117,34 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 权限分配对话框 -->
+    <el-dialog
+        title="权限分配"
+        v-model="permissionDialogVisible"
+        width="600px"
+        @close="handlePermissionDialogClose"
+    >
+      <div v-loading="permissionLoading">
+        <el-tree
+            ref="permissionTree"
+            :data="permissionTreeData"
+            show-checkbox
+            node-key="id"
+            :props="defaultProps"
+            :default-checked-keys="defaultCheckedKeys"
+            :default-expanded-keys="defaultExpandedKeys"
+            :check-strictly="checkStrictly"
+            @check="handleTreeCheck"
+        />
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="permissionDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitPermissions" :loading="permissionSubmitLoading">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -123,6 +152,7 @@
 import {computed, onMounted, reactive, ref} from 'vue';
 import {ElMessage} from 'element-plus';
 import roleService from '@/utils/roleService';
+import permissionService from '@/utils/permissionService';
 
 export default {
   name: 'RoleManagement',
@@ -134,6 +164,16 @@ export default {
     const isEditMode = ref(false);
     const roleForm = ref(null);
     const isInitializing = ref(true); // 添加初始化状态标记
+
+    // 权限相关
+    const permissionDialogVisible = ref(false);
+    const permissionLoading = ref(false);
+    const permissionSubmitLoading = ref(false);
+    const permissionTree = ref(null);
+    const currentRoleId = ref(null);
+    const allPermissions = ref([]);
+    const rolePermissions = ref([]);
+    const checkStrictly = ref(true); // 控制父子节点是否严格模式
 
     // 搜索表单
     const searchForm = reactive({
@@ -167,6 +207,61 @@ export default {
     const dialogTitle = computed(() => {
       return isEditMode.value ? '编辑角色' : '新增角色';
     });
+
+    // 权限树配置
+    const defaultProps = {
+      children: 'children',
+      label: 'name'
+    };
+
+    //权限数
+    const permissionTreeData = computed(() => {
+      return buildPermissionTree(allPermissions.value);
+    });
+
+    //选中的权限点集合
+    const defaultCheckedKeys = computed(() => {
+      // 设置 check-strictly ，父子节点的选中状态不再关联
+      return rolePermissions.value.map(p => p.permission_id);
+    });
+
+    //展开的权限点
+    const defaultExpandedKeys = computed(() => {
+      return allPermissions.value.filter(p => p.children && p.children.length > 0).map(p => p.id);
+    });
+
+    // 构建权限树
+    const buildPermissionTree = (permissions) => {
+      const permissionMap = {};
+      const result = [];
+
+      // 创建权限映射
+      permissions.forEach(permission => {
+        permissionMap[permission.code] = {
+          ...permission,
+          children: []
+        };
+      });
+
+      // 构建树结构
+      permissions.forEach(permission => {
+        if (permission.parentCode && permissionMap[permission.parentCode]) {
+          permissionMap[permission.parentCode].children.push(permissionMap[permission.code]);
+        } else {
+          result.push(permissionMap[permission.code]);
+        }
+      });
+
+      return result;
+    };
+
+    // 处理树节点选中事件
+    const handleTreeCheck = (data, checkedInfo) => {
+      // 这个方法会在用户手动勾选节点时触发
+      // Element Plus 的 el-tree 默认已经处理了父子节点的关联关系
+      // 我们不需要在这里做额外处理，除非有特殊需求
+      console.log('Tree check event:', data, checkedInfo);
+    };
 
     // 获取角色列表
     const fetchRoles = async () => {
@@ -236,6 +331,89 @@ export default {
         desc: row.desc,
         enable: row.enable
       });
+    };
+
+    // 处理权限分配
+    const handlePermission = async (row) => {
+      currentRoleId.value = row.id;
+      checkStrictly.value = true; // 初始化时设置为严格模式
+      permissionDialogVisible.value = true;
+      permissionLoading.value = true;
+
+      try {
+        // 获取所有权限
+        const permissionResult = await permissionService.getAllPermission();
+        if (permissionResult.code === 0) {
+          allPermissions.value = permissionResult.data;
+        } else {
+          ElMessage.error(permissionResult.msg || '获取权限列表失败');
+          return;
+        }
+
+        // 获取角色当前权限
+        const rolePermissionResult = await permissionService.getRolePermissions({roleId: row.id});
+        if (rolePermissionResult.code === 0) {
+          rolePermissions.value = rolePermissionResult.data || [];
+        } else {
+          ElMessage.error(rolePermissionResult.msg || '获取角色权限失败');
+          rolePermissions.value = [];
+        }
+
+        // 延迟设置树的选中状态，并在设置完成后关闭严格模式
+        setTimeout(() => {
+          if (permissionTree.value && rolePermissions.value.length > 0) {
+            const checkedKeys = rolePermissions.value.map(p => p.permission_id);
+            permissionTree.value.setCheckedKeys(checkedKeys);
+
+            // 初始化完成后关闭严格模式，启用父子节点联动
+            setTimeout(() => {
+              checkStrictly.value = false;
+            }, 0);
+          } else {
+            // 即使没有权限数据，也要关闭严格模式
+            setTimeout(() => {
+              checkStrictly.value = false;
+            }, 0);
+          }
+        }, 0);
+
+      } catch (error) {
+        ElMessage.error('获取权限信息出错');
+      } finally {
+        permissionLoading.value = false;
+      }
+    };
+
+    // 提交权限分配
+    const submitPermissions = async () => {
+      permissionSubmitLoading.value = true;
+      try {
+
+        const checkedKeys = permissionTree.value.getCheckedKeys();     // 完全选中的节点
+        const halfCheckedKeys = permissionTree.value.getHalfCheckedKeys(); // 半选中的节点
+        const allCheckedKeys = [...checkedKeys, ...halfCheckedKeys];   // 合并所有选中的节点
+        console.log('checkedKeys:', checkedKeys);
+        console.log('halfCheckedKeys:', halfCheckedKeys);
+        console.log('allCheckedKeys:', allCheckedKeys);
+
+        const result = await permissionService.updateRolePermissions(
+            {
+              roleId: currentRoleId.value,
+              permissionIds: allCheckedKeys
+            }
+        );
+
+        if (result.code === 0) {
+          ElMessage.success('权限分配成功');
+          permissionDialogVisible.value = false;
+        } else {
+          ElMessage.error(result.msg || '权限分配失败');
+        }
+      } catch (error) {
+        ElMessage.error('权限分配出错');
+      } finally {
+        permissionSubmitLoading.value = false;
+      }
     };
 
     // 切换角色状态
@@ -323,6 +501,13 @@ export default {
       }
     };
 
+    // 关闭权限对话框时的清理工作
+    const handlePermissionDialogClose = () => {
+      currentRoleId.value = null;
+      allPermissions.value = [];
+      rolePermissions.value = [];
+    };
+
     // 分页相关方法
     const handleSizeChange = (val) => {
       pagination.pageSize = val;
@@ -350,15 +535,29 @@ export default {
       roleRules,
       dialogTitle,
       roleForm,
+      // 权限相关
+      permissionDialogVisible,
+      permissionLoading,
+      permissionSubmitLoading,
+      permissionTree,
+      permissionTreeData,
+      defaultProps,
+      defaultCheckedKeys,
+      defaultExpandedKeys,
+      checkStrictly,
       fetchRoles,
       searchRoles,
       resetSearch,
       handleAdd,
       handleEdit,
+      handlePermission,
+      submitPermissions,
       toggleRoleStatus,
       submitRole,
       handleDialogClose,
+      handlePermissionDialogClose,
       handleSizeChange,
+      handleTreeCheck,
       handleCurrentChange
     };
   }
