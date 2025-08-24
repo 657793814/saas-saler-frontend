@@ -6,7 +6,7 @@ class ProductService {
     async getProducts(params = {}) {
         try {
             // 模拟API调用
-            const result = await apiRequest.get('/api/products', {params});
+            const result = await apiRequest.post('/api/products/page', params);
             return result;
         } catch (error) {
             console.error('获取商品列表错误:', error);
@@ -43,7 +43,7 @@ class ProductService {
     // 创建商品
     async createProduct(productData) {
         try {
-            const result = await apiRequest.post('/api/products', productData);
+            const result = await apiRequest.post('/api/products/create', productData);
             return result;
         } catch (error) {
             console.error('创建商品错误:', error);

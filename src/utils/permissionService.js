@@ -24,7 +24,7 @@ class PermissionService {
 
     async getRolePermissions(params = {}) {
         try {
-            const result = await apiRequest.post('/api/permissions/by_role?role_id=' + params.roleId, {});
+            const result = await apiRequest.post('/api/permissions/by_role', {role_id: params.roleId}, {});
             return result;
         } catch (error) {
             console.error('获取权限列表错误:', error);

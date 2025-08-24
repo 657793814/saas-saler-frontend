@@ -72,26 +72,17 @@ class ApiRequest {
                 finalHeaders['header_tenant_code'] = tenant_code;
             }
 
-            // 对于GET请求，添加到URL参数中
-            if (method === 'GET') {
-                const params = new URLSearchParams({
-                    token,
-                    rand_str,
-                    sign,
-                    timestamp,
-                    ...data
-                });
-                finalUrl = `${url}?${params.toString()}`;
-            } else {
-                // 对于POST等请求，添加到请求体中
-                finalData = {
-                    token,
-                    rand_str,
-                    sign,
-                    timestamp,
-                    ...data
-                };
-            }
+            //sign 相关参数
+            const params = new URLSearchParams({
+                token,
+                rand_str,
+                sign,
+                timestamp,
+                ...data
+            });
+            finalUrl = `${url}?${params.toString()}`;
+
+
         }
 
         const config = {
