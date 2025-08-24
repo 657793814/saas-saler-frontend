@@ -28,6 +28,19 @@ class ApiRequest {
         return Math.floor(Date.now() / 1000);
     }
 
+    getTodayDateString() {
+        return new Date().toISOString().split('T')[0];
+    }
+
+    generateRandomString(length = 10) {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        return result;
+    }
+
     // 检查是否需要跳转到登录页
     checkAuthError(responseData) {
         // 定义需要跳转到登录页的错误码

@@ -311,6 +311,7 @@ import productService from "@/utils/productService";
 import {debounce} from 'lodash';
 import {QuillEditor} from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
+import apiRequest from "@/utils/request";
 
 export default {
   name: 'ProductCreate',
@@ -597,6 +598,7 @@ export default {
         // 使用 FormData 构造请求数据
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('objectName', "/product_img/" + apiRequest.getTodayDateString() + "/" + apiRequest.generateRandomString(8));
 
         // 获取认证信息
         const token = localStorage.getItem('token');
@@ -654,6 +656,7 @@ export default {
       if (response && response.data) {
         // 假设响应结构为 { code: 0, data: { url: '图片URL' } }
         file.url = response.data.url || response.data;
+        file.path = response.data.path;
         file.response = response; // 保存响应数据
       } else if (response && response.url) {
         // 如果响应直接包含 url 字段
@@ -695,7 +698,8 @@ export default {
             // 添加图片文件URL（已上传的图片）
             productForm.images.forEach((file) => {
               if (file.url) {
-                submitData.imageUrls.push(file.url);
+                //提交只传路径即可
+                submitData.imageUrls.push(file.path);
               }
             });
 
@@ -705,7 +709,7 @@ export default {
                 price: sku.price,
                 costPrice: sku.costPrice,
                 stock: sku.stock,
-                image: sku.image || '', // 添加图片字段
+                image: sku.imgPath || '', // 添加图片路径
                 specifications: sku.specifications.map(spec => ({
                   specId: spec.specId,
                   specName: spec.specName,
@@ -759,6 +763,7 @@ export default {
     const handleSkuImageSuccess = (response, file, skuRow) => {
       if (response && response.data) {
         skuRow.image = response.data.url || response.data
+        skuRow.imgPath = response.data.path; //只上传路径即可
       } else if (response && response.url) {
         skuRow.image = response.url
       }
