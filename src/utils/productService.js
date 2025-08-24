@@ -3,40 +3,13 @@ import apiRequest from './request';
 
 class ProductService {
     // 获取商品列表
-    async getProducts(params = {}) {
+    async getProductList(params = {}) {
         try {
             // 模拟API调用
             const result = await apiRequest.post('/api/products/page', params);
             return result;
         } catch (error) {
             console.error('获取商品列表错误:', error);
-            // 返回模拟数据用于演示
-            return {
-                code: 0,
-                data: {
-                    list: [
-                        {
-                            id: 1,
-                            name: '商品1',
-                            code: 'P001',
-                            price: 99.99,
-                            stock: 100,
-                            status: 1,
-                            description: '商品描述1'
-                        },
-                        {
-                            id: 2,
-                            name: '商品2',
-                            code: 'P002',
-                            price: 199.99,
-                            stock: 50,
-                            status: 1,
-                            description: '商品描述2'
-                        }
-                    ],
-                    total: 2
-                }
-            };
         }
     }
 
@@ -69,6 +42,16 @@ class ProductService {
             return result;
         } catch (error) {
             console.error('删除商品错误:', error);
+            throw error;
+        }
+    }
+
+    async specDataPage(postData) {
+        try {
+            const result = await apiRequest.post(`/api/products/spec_data`, postData);
+            return result;
+        } catch (error) {
+            console.error('加载规格类型失败:', error);
             throw error;
         }
     }

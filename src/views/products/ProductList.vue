@@ -26,16 +26,88 @@
       </div>
 
       <!-- 商品列表 -->
-      <el-table :data="products" style="width: 100%" v-loading="loading" border>
-        <el-table-column prop="id" label="ID" width="80"/>
-        <el-table-column prop="name" label="商品名称" width="180"/>
-        <el-table-column prop="code" label="商品编码" width="150"/>
-        <el-table-column prop="price" label="价格" width="100">
-          <template #default="scope">
-            ¥{{ scope.row.price }}
+      <el-table
+          :data="products"
+          style="width: 100%"
+          v-loading="loading"
+          border
+          row-key="id"
+          :expand-row-keys="expandedRowKeys"
+          @expand-change="handleExpandChange"
+      >
+        <!-- 展开列 -->
+        <el-table-column type="expand">
+          <template #default="props">
+            <el-table
+                :data="props.row.children"
+                style="width: 100%"
+                border
+                class="sku-table"
+            >
+              <el-table-column prop="skuId" label="SKU ID" width="100"/>
+              <el-table-column prop="code" label="商品code" width="200"/>
+              <el-table-column prop="spec" label="规格" width="200"/>
+              <el-table-column prop="price" label="销售价" width="120">
+                <template #default="scope">
+                  ¥{{ scope.row.salePrice }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="costPrice" label="采购价" width="120">
+                <template #default="scope">
+                  ¥{{ scope.row.costPrice }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="stock" label="库存" width="100"/>
+              <el-table-column label="预览图" width="120">
+                <template #default="scope">
+                  <el-image
+                      v-if="scope.row.imgUrl"
+                      :src="scope.row.imgUrl"
+                      class="sku-preview"
+                      fit="cover"
+                      :preview-src-list="[scope.row.imgUrl]"
+                  />
+                  <span v-else>无图片</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="150">
+                <template #default="scope">
+                  <el-button
+                      size="small"
+                      :type="scope.row.status === 1 ? 'warning' : 'success'"
+                      @click="toggleSkuStatus(scope.row, props.row)"
+                  >
+                    {{ scope.row.status === 1 ? '下架' : '上架' }}
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </template>
         </el-table-column>
-        <el-table-column prop="stock" label="库存" width="100"/>
+
+        <el-table-column prop="productId" label="商品ID" width="80"/>
+        <el-table-column prop="name" label="产品名称" min-width="200"/>
+        <el-table-column prop="code" label="产品code" min-width="200"/>
+        <el-table-column label="SKU数量" width="100">
+          <template #default="scope">
+            <span v-if="scope.row.children && scope.row.children.length > 0">
+              {{ scope.row.children.length }}
+            </span>
+            <span v-else>无SKU</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="预览图" width="120">
+          <template #default="scope">
+            <el-image
+                v-if="scope.row.imgUrl"
+                :src="scope.row.imgUrl"
+                class="sku-preview"
+                fit="cover"
+                :preview-src-list="[scope.row.imgUrl]"
+            />
+            <span v-else>无图片</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="scope">
             <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'">
@@ -43,10 +115,29 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="250" fixed="right">
           <template #default="scope">
-            <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+            <el-button
+                size="small"
+                :type="scope.row.status === 1 ? 'warning' : 'success'"
+                @click="toggleProductStatus(scope.row)"
+            >
+              {{ scope.row.status === 1 ? '下架' : '上架' }}
+            </el-button>
+            <el-button
+                size="small"
+                type="primary"
+                @click="handleEdit(scope.row)"
+            >
+              编辑
+            </el-button>
+            <el-button
+                size="small"
+                type="danger"
+                @click="handleDelete(scope.row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -64,63 +155,14 @@
         />
       </div>
     </el-card>
-
-    <!-- 商品编辑对话框 -->
-    <el-dialog
-        :title="dialogTitle"
-        v-model="dialogVisible"
-        width="600px"
-        @close="handleDialogClose"
-    >
-      <el-form
-          :model="form"
-          :rules="productRules"
-          ref="productFormRef"
-          label-width="100px"
-      >
-        <el-form-item label="商品名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入商品名称"/>
-        </el-form-item>
-        <el-form-item label="商品编码" prop="code">
-          <el-input v-model="form.code" placeholder="请输入商品编码" :disabled="isEditMode"/>
-        </el-form-item>
-        <el-form-item label="价格" prop="price">
-          <el-input v-model.number="form.price" placeholder="请输入价格">
-            <template #prepend>¥</template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="库存" prop="stock">
-          <el-input v-model.number="form.stock" placeholder="请输入库存数量"/>
-        </el-form-item>
-        <el-form-item label="状态" prop="status">
-          <el-radio-group v-model="form.status">
-            <el-radio :label="1">上架</el-radio>
-            <el-radio :label="0">下架</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="商品描述" prop="description">
-          <el-input
-              v-model="form.description"
-              type="textarea"
-              placeholder="请输入商品描述"
-              :rows="3"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitProduct" :loading="submitLoading">确定</el-button>
-        </span>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script>
-import {computed, onMounted, reactive, ref} from 'vue';
+import {onMounted, reactive, ref} from 'vue';
 import {ElMessage, ElMessageBox} from 'element-plus';
 import productService from '@/utils/productService';
+import {useRouter} from 'vue-router';
 
 export default {
   name: 'ProductList',
@@ -128,9 +170,8 @@ export default {
     const products = ref([]);
     const loading = ref(false);
     const submitLoading = ref(false);
-    const dialogVisible = ref(false);
-    const isEditMode = ref(false);
-    const productFormRef = ref(null);
+    const router = useRouter();
+    const expandedRowKeys = ref([]); // 用于控制展开的行
 
     // 搜索表单
     const searchForm = reactive({
@@ -145,59 +186,26 @@ export default {
       total: 0
     });
 
-    // 商品表单
-    const form = reactive({
-      id: null,
-      name: '',
-      code: '',
-      price: 0,
-      stock: 0,
-      status: 1,
-      description: ''
-    });
-
-    // 表单验证规则
-    const productRules = {
-      name: [
-        {required: true, message: '请输入商品名称', trigger: 'blur'}
-      ],
-      code: [
-        {required: true, message: '请输入商品编码', trigger: 'blur'}
-      ],
-      price: [
-        {required: true, message: '请输入价格', trigger: 'blur'},
-        {type: 'number', message: '价格必须为数字', trigger: 'blur'}
-      ],
-      stock: [
-        {required: true, message: '请输入库存', trigger: 'blur'},
-        {type: 'number', message: '库存必须为数字', trigger: 'blur'}
-      ]
-    };
-
-    const dialogTitle = computed(() => {
-      return isEditMode.value ? '编辑商品' : '新增商品';
-    });
-
     // 获取商品列表
     const fetchProducts = async () => {
       loading.value = true;
       try {
         const params = {
-          page: pagination.currentPage,
+          current: pagination.currentPage,
           size: pagination.pageSize,
-          name: searchForm.name,
+          title: searchForm.name,
           code: searchForm.code
         };
 
-        const result = await productService.getProducts(params);
+        const result = await productService.getProductList(params);
         if (result.code === 0) {
-          products.value = result.data.list || [];
+          products.value = result.data.records || [];
           pagination.total = result.data.total || 0;
         } else {
           ElMessage.error(result.msg || '获取商品列表失败');
         }
       } catch (error) {
-        ElMessage.error('获取商品列表出错');
+        ElMessage.error('获取商品列表出错: ' + error.message);
       } finally {
         loading.value = false;
       }
@@ -219,39 +227,21 @@ export default {
 
     // 新增商品
     const handleAdd = () => {
-      isEditMode.value = false;
-      dialogVisible.value = true;
-      // 重置表单
-      Object.assign(form, {
-        id: null,
-        name: '',
-        code: '',
-        price: 0,
-        stock: 0,
-        status: 1,
-        description: ''
-      });
+      router.push('/products/create');
     };
 
     // 编辑商品
     const handleEdit = (row) => {
-      isEditMode.value = true;
-      dialogVisible.value = true;
-      Object.assign(form, {
-        id: row.id,
-        name: row.name,
-        code: row.code,
-        price: row.price,
-        stock: row.stock,
-        status: row.status,
-        description: row.description
+      router.push({
+        path: '/products/edit',
+        query: {productId: row.id}
       });
     };
 
     // 删除商品
     const handleDelete = (row) => {
       ElMessageBox.confirm(
-          `确定要删除商品 "${row.name}" 吗？`,
+          `确定要删除商品 "${row.title}" 吗？`,
           '确认删除',
           {
             confirmButtonText: '确定',
@@ -268,49 +258,51 @@ export default {
             ElMessage.error(result.msg || '删除失败');
           }
         } catch (error) {
-          ElMessage.error('删除出错');
+          ElMessage.error('删除出错: ' + error.message);
         }
       }).catch(() => {
         // 用户取消删除
       });
     };
 
-    // 提交商品（新增或编辑）
-    const submitProduct = async () => {
-      if (!productFormRef.value) return;
-
-      await productFormRef.value.validate(async (valid) => {
-        if (valid) {
-          submitLoading.value = true;
-          try {
-            let result;
-            if (isEditMode.value) {
-              result = await productService.updateProduct(form);
-            } else {
-              result = await productService.createProduct(form);
-            }
-
-            if (result.code === 0) {
-              ElMessage.success(`${isEditMode.value ? '更新' : '创建'}成功`);
-              dialogVisible.value = false;
-              fetchProducts();
-            } else {
-              ElMessage.error(result.msg || `${isEditMode.value ? '更新' : '创建'}失败`);
-            }
-          } catch (error) {
-            ElMessage.error(`${isEditMode.value ? '更新' : '创建'}出错`);
-          } finally {
-            submitLoading.value = false;
-          }
+    // 切换商品状态
+    const toggleProductStatus = async (row) => {
+      let newStatus;
+      try {
+        const newStatus = row.status === 1 ? 0 : 1;
+        const result = await productService.updateProductStatus(row.id, newStatus);
+        if (result.code === 0) {
+          ElMessage.success(`${newStatus === 1 ? '上架' : '下架'}成功`);
+          row.status = newStatus;
+        } else {
+          ElMessage.error(result.msg || `${newStatus === 1 ? '上架' : '下架'}失败`);
         }
-      });
+      } catch (error) {
+        ElMessage.error(`${newStatus === 1 ? '上架' : '下架'}出错: ` + error.message);
+      }
     };
 
-    // 关闭对话框时的清理工作
-    const handleDialogClose = () => {
-      if (productFormRef.value) {
-        productFormRef.value.resetFields();
+    // 切换SKU状态
+    const toggleSkuStatus = async (skuRow) => {
+      let newStatus;
+      try {
+        const newStatus = skuRow.status === 1 ? 0 : 1;
+        const result = await productService.updateSkuStatus(skuRow.id, newStatus);
+        if (result.code === 0) {
+          ElMessage.success(`${newStatus === 1 ? '上架' : '下架'}成功`);
+          skuRow.status = newStatus;
+        } else {
+          ElMessage.error(result.msg || `${newStatus === 1 ? '上架' : '下架'}失败`);
+        }
+      } catch (error) {
+        ElMessage.error(`${newStatus === 1 ? '上架' : '下架'}出错: ` + error.message);
       }
+    };
+
+    // 处理展开/收起事件
+    const handleExpandChange = (row, expandedRows) => {
+      console.log('handleExpandChange', row, expandedRows);
+      // 可以在这里处理展开逻辑，比如懒加载SKU数据
     };
 
     // 分页相关方法
@@ -332,22 +324,18 @@ export default {
       products,
       loading,
       submitLoading,
-      dialogVisible,
-      isEditMode,
       searchForm,
       pagination,
-      form,
-      productRules,
-      dialogTitle,
-      productFormRef,
+      expandedRowKeys,
       fetchProducts,
       searchProducts,
       resetSearch,
       handleAdd,
       handleEdit,
       handleDelete,
-      submitProduct,
-      handleDialogClose,
+      toggleProductStatus,
+      toggleSkuStatus,
+      handleExpandChange,
       handleSizeChange,
       handleCurrentChange
     };
@@ -372,7 +360,21 @@ export default {
   justify-content: flex-end;
 }
 
+.sku-table {
+  margin-left: 50px;
+  margin-right: 50px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.sku-preview {
+  width: 50px;
+  height: 50px;
+  border-radius: 4px;
+}
+
 .dialog-footer {
   text-align: right;
 }
 </style>
+

@@ -39,13 +39,17 @@
 
             <el-col :span="24">
               <el-form-item label="详细描述" prop="description">
-                <el-input
-                    v-model="productForm.description"
-                    type="textarea"
-                    :rows="4"
-                    placeholder="请输入商品详细描述"/>
+                <div class="quill-editor-container">
+                  <QuillEditor
+                      v-model:content="productForm.description"
+                      contentType="html"
+                      class="quill-editor-wrapper"
+                  />
+                </div>
               </el-form-item>
             </el-col>
+
+
           </el-row>
         </el-card>
 
@@ -159,7 +163,7 @@
                 <span>{{ formatSpecCombination(scope.row.specifications) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="price" label="销售价" width="120">
+            <el-table-column prop="price" label="销售价" width="150">
               <template #default="scope">
                 <el-input-number
                     v-model="scope.row.price"
@@ -168,7 +172,7 @@
                     size="small"/>
               </template>
             </el-table-column>
-            <el-table-column prop="costPrice" label="成本价" width="120">
+            <el-table-column prop="costPrice" label="成本价" width="150">
               <template #default="scope">
                 <el-input-number
                     v-model="scope.row.costPrice"
@@ -177,12 +181,51 @@
                     size="small"/>
               </template>
             </el-table-column>
-            <el-table-column prop="stock" label="库存" width="120">
+            <el-table-column prop="stock" label="库存" width="150">
               <template #default="scope">
                 <el-input-number
                     v-model="scope.row.stock"
                     :min="0"
                     size="small"/>
+              </template>
+            </el-table-column>
+            <!-- SKU图片上传列 -->
+            <el-table-column label="预览图" width="150">
+              <template #default="scope">
+                <div class="sku-image-container">
+                  <!-- 如果已有图片，显示图片和删除按钮 -->
+                  <div v-if="scope.row.image" class="sku-image-wrapper">
+                    <div class="sku-image-preview">
+                      <img
+                          :src="scope.row.image"
+                          class="sku-preview-img"
+                          @click="handleSkuImagePreviewByImageUrl(scope.row.image)"
+                      />
+                      <el-button
+                          class="sku-image-delete-btn"
+                          type="danger"
+                          size="small"
+                          @click="handleSkuImageRemove(scope.row)"
+                          icon="el-icon-delete"
+                          circle
+                      ></el-button>
+                    </div>
+                  </div>
+                  <!-- 如果没有图片，显示上传组件 -->
+                  <el-upload
+                      v-else
+                      class="sku-image-uploader"
+                      list-type="picture-card"
+                      :file-list="[]"
+                      :on-preview="(file) => handleSkuImagePreview(file)"
+                      :on-success="(response, file) => handleSkuImageSuccess(response, file, scope.row)"
+                      :on-error="handleSkuImageError"
+                      :before-upload="beforePictureUpload"
+                      :http-request="(options) => customPictureUpload(options)"
+                      :limit="1">
+                    <i class="el-icon-plus"></i>
+                  </el-upload>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -205,11 +248,26 @@
     <el-dialog
         v-model="specTypeDialogVisible"
         title="选择已有规格类型"
-        width="600px">
+        width="700px">
+      <!-- 查询条件 -->
+      <div style="margin-bottom: 15px;">
+        <el-input
+            v-model="specTypeQuery.name"
+            placeholder="请输入规格类型名称"
+            style="width: 200px; margin-right: 10px;"
+            @keyup.enter="searchSpecTypes"
+        />
+        <el-button type="primary" @click="searchSpecTypes">查询</el-button>
+      </div>
+
+      <!-- 规格类型表格 -->
       <el-table
           :data="availableSpecTypes"
           @selection-change="handleSpecTypeSelection"
-          max-height="400">
+          v-loading="loading"
+          height="400"
+          :key="specTypeDialogVisible.toString()"
+          style="width: 100%">
         <el-table-column type="selection" width="55"></el-table-column>
         <el-table-column prop="specTypeName" label="规格类型名称"></el-table-column>
         <el-table-column label="规格值">
@@ -222,6 +280,19 @@
         </el-table-column>
       </el-table>
 
+      <!-- 分页 -->
+      <el-pagination
+          v-if="specTypeQuery.total > 0"
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="specTypeQuery.total"
+          :page-sizes="[10, 20, 50, 100]"
+          v-model:page-size="specTypeQuery.pageSize"
+          v-model:current-page="specTypeQuery.pageNum"
+          @size-change="handleSpecTypePageSizeChange"
+          @current-change="handleSpecTypePageChange"
+          style="margin-top: 15px; text-align: right;"
+      />
+
       <template #footer>
         <div style="text-align: right;">
           <el-button @click="specTypeDialogVisible = false">取消</el-button>
@@ -232,15 +303,20 @@
   </div>
 </template>
 
-
 <script>
-import {computed, onMounted, reactive, ref} from 'vue'
+import {computed, nextTick, onMounted, reactive, ref} from 'vue'
 import {ElMessage} from 'element-plus'
 import CryptoJS from 'crypto-js';
 import productService from "@/utils/productService";
+import {debounce} from 'lodash';
+import {QuillEditor} from '@vueup/vue-quill'
+import '@vueup/vue-quill/dist/vue-quill.snow.css'
 
 export default {
   name: 'ProductCreate',
+  components: {
+    QuillEditor
+  },
   setup() {
     const productFormRef = ref(null)
     const loading = ref(false)
@@ -254,6 +330,14 @@ export default {
     const availableSpecTypes = ref([]) // 从API获取的可用规格类型
     const selectedSpecTypeRows = ref([]) // 表格中选择的规格类型
 
+    // 规格类型查询相关
+    const specTypeQuery = reactive({
+      name: '',
+      pageNum: 1,
+      pageSize: 10,
+      total: 0
+    })
+
     // 商品表单数据
     const productForm = reactive({
       title: '',
@@ -263,12 +347,7 @@ export default {
     })
 
     // 规格相关
-    const specifications = ref([
-      {id: 1, name: '颜色', values: []},
-      {id: 2, name: '尺寸', values: []},
-      {id: 3, name: '材质', values: []}
-    ])
-
+    const specifications = ref([])
     const selectedSpecs = ref([])
     const newSpecValues = reactive({})
 
@@ -344,7 +423,8 @@ export default {
 
     // 添加新规格类型
     const addNewSpecType = () => {
-      if (!newSpecTypeName.value.trim()) {
+      const trimmedName = newSpecTypeName.value ? newSpecTypeName.value.trim() : '';
+      if (!trimmedName) {
         ElMessage.warning('请输入规格类型名称')
         return
       }
@@ -358,7 +438,7 @@ export default {
 
       // 添加新规格类型（使用临时ID，不在新增时候创建了，提价商品时统一创建）
       const newSpec = {
-        id: "tmp_" + Date.now(), // 临时ID
+        id: "tmp_type_" + Date.now(), // 临时ID
         name: newSpecTypeName.value.trim(),
         values: []
       }
@@ -380,39 +460,36 @@ export default {
 
     // 打开规格类型选择弹窗
     const openSpecTypeDialog = async () => {
-      // 加载已有规格类型数据（模拟API调用）
-      await loadAvailableSpecTypes()
       specTypeDialogVisible.value = true
       // 清空之前的选择
       selectedSpecTypeRows.value = []
+
+      // 使用 nextTick 确保 DOM 更新完成后再加载数据
+      await nextTick();
+      await loadAvailableSpecTypes();
     }
 
     // 加载可用的规格类型（模拟API调用）
     const loadAvailableSpecTypes = async () => {
       loading.value = true
       try {
-        // 这里应该调用真实的API获取规格类型数据
-        // 示例数据结构:
-        availableSpecTypes.value = [
-          {
-            specTypeId: 10,
-            specTypeName: '品牌',
-            specValues: [
-              {specId: 101, specValue: '耐克'},
-              {specId: 102, specValue: '阿迪达斯'},
-              {specId: 103, specValue: '新百伦'}
-            ]
-          },
-          {
-            specTypeId: 11,
-            specTypeName: '重量',
-            specValues: [
-              {specId: 111, specValue: '100g'},
-              {specId: 112, specValue: '200g'},
-              {specId: 113, specValue: '500g'}
-            ]
-          }
-        ]
+        // 构造查询参数
+        const submitData = {
+          current: specTypeQuery.pageNum,
+          size: specTypeQuery.pageSize
+        };
+
+        // 只有当规格类型名称存在且不为空时才添加到查询条件中
+        if (specTypeQuery.name && specTypeQuery.name.trim() !== '') {
+          submitData.name = specTypeQuery.name.trim();
+        }
+        const result = await productService.specDataPage(submitData);
+        if (result.code === 0) {
+          availableSpecTypes.value = result.data.records;
+          specTypeQuery.total = result.data.total;
+        } else {
+          ElMessage.error(result.msg || '加载规格类型失败');
+        }
       } catch (error) {
         ElMessage.error('加载规格类型失败: ' + error.message)
       } finally {
@@ -473,7 +550,7 @@ export default {
         const exists = spec.values.some(v => v.value === value)
         if (!exists) {
           spec.values.push({
-            id: "tmp_" + Date.now(), // 简单生成唯一ID
+            id: "tmp_value_" + Date.now(), // 简单生成唯一ID
             value: value
           })
         }
@@ -486,13 +563,6 @@ export default {
       // 根据新需求，不支持删除规格值
       ElMessage.info('根据需求不支持删除规格值id:', specId)
       ElMessage.info('根据需求不支持删除规格值value:', valueId)
-      // 如果需要实现删除功能，可以取消下面的注释
-      /*
-      const spec = specifications.value.find(s => s.id === specId)
-      if (spec) {
-        spec.values = spec.values.filter(v => v.id !== valueId)
-      }
-      */
     }
 
     // 图片上传前的处理
@@ -605,16 +675,6 @@ export default {
       return specs.map(spec => `${spec.specName}:${spec.value}`).join(' ');
     }
 
-    // 重置表单
-    const resetForm = () => {
-      productFormRef.value.resetFields();
-      productForm.images = [];
-      selectedSpecs.value = [];
-      specifications.value.forEach(spec => {
-        spec.values = [];
-      });
-    }
-
     // 提交表单
     const submitForm = async () => {
       if (!productFormRef.value) return;
@@ -645,6 +705,7 @@ export default {
                 price: sku.price,
                 costPrice: sku.costPrice,
                 stock: sku.stock,
+                image: sku.image || '', // 添加图片字段
                 specifications: sku.specifications.map(spec => ({
                   specId: spec.specId,
                   specName: spec.specName,
@@ -655,7 +716,7 @@ export default {
             });
 
             const result = await productService.createProduct(submitData);
-            
+
             if (result.code === 0) {
               ElMessage.success('商品创建成功');
               resetForm();
@@ -678,7 +739,78 @@ export default {
       });
     })
 
+    // SKU图片预览相关方法
+    const handleSkuImagePreview = (file) => {
+      // 处理上传组件传递的文件对象
+      previewImageUrl.value = file.url || file.response?.data?.url || file.response?.url || (file.raw ? URL.createObjectURL(file.raw) : '');
+      previewVisible.value = true;
+    }
+
+    // 专门处理直接图片URL的预览方法
+    const handleSkuImagePreviewByImageUrl = (imageUrl) => {
+      previewImageUrl.value = imageUrl;
+      previewVisible.value = true;
+    }
+
+    const handleSkuImageRemove = (skuRow) => {
+      skuRow.image = ''
+    }
+
+    const handleSkuImageSuccess = (response, file, skuRow) => {
+      if (response && response.data) {
+        skuRow.image = response.data.url || response.data
+      } else if (response && response.url) {
+        skuRow.image = response.url
+      }
+      ElMessage.success('SKU图片上传成功')
+    }
+
+    const handleSkuImageError = (err) => {
+      ElMessage.error('SKU图片上传失败: ' + (err.message || '未知错误'))
+      console.error('SKU图片上传错误:', err)
+    }
+
+    // 防抖处理规格类型加载
+    const debouncedLoadAvailableSpecTypes = debounce(loadAvailableSpecTypes, 300);
+
+    // 查询规格类型
+    const searchSpecTypes = () => {
+      specTypeQuery.pageNum = 1; // 重置到第一页
+      // 清理输入内容（去除首尾空格）
+      if (specTypeQuery.name) {
+        specTypeQuery.name = specTypeQuery.name.trim();
+      }
+      debouncedLoadAvailableSpecTypes();
+    }
+
+    // 分页变化处理
+    const handleSpecTypePageChange = (pageNum) => {
+      specTypeQuery.pageNum = pageNum;
+      debouncedLoadAvailableSpecTypes();
+    }
+
+    // 每页数量变化处理
+    const handleSpecTypePageSizeChange = (pageSize) => {
+      specTypeQuery.pageNum = 1; // 重置到第一页
+      specTypeQuery.pageSize = pageSize;
+      debouncedLoadAvailableSpecTypes();
+    }
+
+    // 重置表单
+    const resetForm = () => {
+      productFormRef.value.resetFields();
+      productForm.images = [];
+      selectedSpecs.value = [];
+      specifications.value.forEach(spec => {
+        spec.values = [];
+      });
+      productForm.description = '';
+    }
+
     return {
+      searchSpecTypes,
+      handleSpecTypePageChange,
+      handleSpecTypePageSizeChange,
       productFormRef,
       loading,
       submitLoading,
@@ -700,6 +832,11 @@ export default {
       handlePictureRemove,
       handlePictureSuccess,
       handlePictureError,
+      handleSkuImagePreview,
+      handleSkuImagePreviewByImageUrl,
+      handleSkuImageRemove,
+      handleSkuImageSuccess,
+      handleSkuImageError,
       formatSpecCombination,
       resetForm,
       submitForm,
@@ -710,6 +847,7 @@ export default {
       specTypeDialogVisible,
       availableSpecTypes,
       selectedSpecTypeRows,
+      specTypeQuery,
       openSpecTypeDialog,
       handleSpecTypeSelection,
       confirmSpecTypeSelection
@@ -717,7 +855,6 @@ export default {
   }
 }
 </script>
-
 
 <style scoped>
 .product-create {
@@ -750,5 +887,102 @@ export default {
 .spec-type-tag {
   margin-right: 10px;
   margin-bottom: 10px;
+}
+
+/* SKU图片相关样式 */
+.sku-image-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sku-image-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sku-image-preview {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.sku-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.sku-preview-img:hover {
+  transform: scale(1.05);
+}
+
+.sku-image-delete-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border: 1px solid #fff;
+}
+
+/* 上传组件样式 */
+.sku-image-uploader .el-upload--picture-card {
+  width: 100px;
+  height: 100px;
+  line-height: 100px;
+  border-radius: 6px;
+}
+
+.sku-image-uploader .el-upload-list--picture-card .el-upload-list__item {
+  width: 100px;
+  height: 100px;
+  border-radius: 6px;
+}
+
+/* Quill Editor 样式修复 */
+.quill-editor-container {
+  height: 300px;
+  width: 100%;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.quill-editor-wrapper {
+  height: 100%;
+}
+
+.quill-editor-wrapper :deep(.ql-toolbar) {
+  border: none !important;
+  border-bottom: 1px solid #dcdfe6 !important;
+  border-radius: 4px 4px 0 0 !important;
+  background-color: #f5f7fa !important;
+  height: auto !important;
+  display: block !important;
+}
+
+.quill-editor-wrapper :deep(.ql-container) {
+  height: calc(100% - 42px) !important;
+  border: none !important;
+  border-radius: 0 0 4px 4px !important;
+  display: block !important;
+}
+
+.quill-editor-wrapper :deep(.ql-editor) {
+  height: calc(100% - 20px) !important;
+  overflow-y: auto !important;
+}
+
+.quill-editor-wrapper :deep(.ql-editor.ql-blank::before) {
+  font-style: normal !important;
+  color: #ccc !important;
 }
 </style>
