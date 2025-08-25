@@ -281,6 +281,12 @@ export default {
         if (result.code === 0) {
           ElMessage.success(`${newStatus === 1 ? '上架' : '下架'}成功`);
           row.enable = newStatus;
+
+          //刷新form
+          if (newStatus === 0) {
+            await fetchProducts();
+          }
+
         } else {
           ElMessage.error(result.msg || `${newStatus === 1 ? '上架' : '下架'}失败`);
         }

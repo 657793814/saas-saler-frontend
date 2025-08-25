@@ -55,7 +55,43 @@
         <nav class="sidebar-nav">
           <ul>
             <li v-for="menu in menus" :key="menu.id">
+              <div v-if="menu.children && menu.children.length > 0">
+                <!-- 有子菜单的一级菜单 -->
+                <div
+                    class="menu-item has-children"
+                    :class="{ active: isMenuActive(menu) }"
+                    @click="toggleMenu(menu.id)"
+                >
+                  <i :class="menu.icon"></i>
+                  <span v-if="!sidebarCollapsed">{{ menu.name }}</span>
+                  <i
+                      v-if="!sidebarCollapsed"
+                      class="arrow-icon"
+                      :class="{ 'rotated': !collapsedMenus[menu.id] }"
+                  >▼</i>
+                </div>
+
+                <!-- 子菜单 -->
+                <ul
+                    v-if="!sidebarCollapsed"
+                    class="submenu"
+                    :class="{ collapsed: collapsedMenus[menu.id] }"
+                >
+                  <li v-for="child in menu.children" :key="child.id">
+                    <router-link
+                        :to="child.path"
+                        active-class="active"
+                        :title="child.name"
+                    >
+                      <i :class="child.icon"></i>
+                      <span>{{ child.name }}</span>
+                    </router-link>
+                  </li>
+                </ul>
+              </div>
+
               <router-link
+                  v-else
                   :to="menu.path"
                   active-class="active"
                   :title="menu.name"
@@ -63,20 +99,6 @@
                 <i :class="menu.icon"></i>
                 <span v-if="!sidebarCollapsed">{{ menu.name }}</span>
               </router-link>
-
-              <!-- 子菜单 -->
-              <ul v-if="menu.children && menu.children.length > 0 && !sidebarCollapsed" class="submenu">
-                <li v-for="child in menu.children" :key="child.id">
-                  <router-link
-                      :to="child.path"
-                      active-class="active"
-                      :title="child.name"
-                  >
-                    <i :class="child.icon"></i>
-                    <span>{{ child.name }}</span>
-                  </router-link>
-                </li>
-              </ul>
             </li>
           </ul>
         </nav>
@@ -115,76 +137,65 @@
 <script>
 import menuService from '@/utils/menuService';
 import {menuIconCSS} from '@/config/menus'
+import {computed, onMounted, reactive, ref} from 'vue'
+import {useRoute, useRouter} from 'vue-router'
 
 export default {
   name: 'App',
-  data() {
-    return {
-      sidebarCollapsed: false,
-      currentUser: {},
-      username: '',
-      userRole: 'user',
-      menus: [],
-      // Toast 相关数据
-      toasts: [],
-      // 确认弹窗相关数据
-      confirmVisible: false,
-      confirmTitle: '',
-      confirmMessage: '',
-      confirmType: 'info',
-      confirmConfirmText: '确定',
-      confirmCancelText: '取消',
-      confirmCallback: null,
-      confirmCancelCallback: null
-    }
-  },
-  computed: {
-    currentPageTitle() {
+  setup() {
+    const route = useRoute()
+    const router = useRouter()
+
+    const sidebarCollapsed = ref(false)
+    const collapsedMenus = reactive({}) // 用于跟踪每个一级菜单的展开/收缩状态
+    const currentUser = ref({})
+    const username = ref('')
+    const userRole = ref('user')
+    const menus = ref([])
+
+    // Toast 相关数据
+    const toasts = ref([])
+    // 确认弹窗相关数据
+    const confirmVisible = ref(false)
+    const confirmTitle = ref('')
+    const confirmMessage = ref('')
+    const confirmType = ref('info')
+    const confirmConfirmText = ref('确定')
+    const confirmCancelText = ref('取消')
+    const confirmCallback = ref(null)
+    const confirmCancelCallback = ref(null)
+
+    const currentPageTitle = computed(() => {
       const routeMap = {
         '/dashboard': '仪表盘',
         '/users': '用户管理',
         '/settings': '系统设置'
       };
-      return routeMap[this.$route.path] || '管理系统';
-    }
-  },
-  mounted() {
+      return routeMap[route.path] || '管理系统';
+    })
 
-    // 动态注入图标样式
-    if (!document.getElementById('menu-icons-style')) {
-      const style = document.createElement('style')
-      style.id = 'menu-icons-style'
-      style.textContent = menuIconCSS
-      document.head.appendChild(style)
-    }
-
-    this.loadUserInfo();
-    this.loadUserMenus();
-
-  },
-  methods: {
     // Toast 相关方法
-    showToast(message, type = 'info', duration = 3000) {
+    const showToast = (message, type = 'info', duration = 3000) => {
       const id = Date.now() + Math.random();
-      this.toasts.push({
+      toasts.value.push({
         id,
         message,
         type
       });
 
       setTimeout(() => {
-        this.removeToast(id);
+        removeToast(id);
       }, duration);
-    },
+    };
 
-    removeToast(id) {
-      const index = this.toasts.findIndex(toast => toast.id === id);
+    const removeToast = (id) => {
+      const index = toasts.value.findIndex(toast => toast.id === id);
       if (index !== -1) {
-        this.toasts.splice(index, 1);
+        toasts.value.splice(index, 1);
       }
-    },
+    };
 
-    getToastIconClass(type) {
+    const getToastIconClass = (type) => {
       const icons = {
         info: 'icon-info',
         success: 'icon-success',
@@ -192,35 +203,35 @@ export default {
         error: 'icon-error'
       };
       return icons[type] || 'icon-info';
-    },
+    };
 
     // 确认弹窗相关方法
-    showConfirm(options) {
-      this.confirmTitle = options.title || '确认';
-      this.confirmMessage = options.message || '';
-      this.confirmType = options.type || 'info';
-      this.confirmConfirmText = options.confirmText || '确定';
-      this.confirmCancelText = options.cancelText || '取消';
-      this.confirmCallback = options.onConfirm || null;
-      this.confirmCancelCallback = options.onCancel || null;
-      this.confirmVisible = true;
-    },
+    const showConfirm = (options) => {
+      confirmTitle.value = options.title || '确认';
+      confirmMessage.value = options.message || '';
+      confirmType.value = options.type || 'info';
+      confirmConfirmText.value = options.confirmText || '确定';
+      confirmCancelText.value = options.cancelText || '取消';
+      confirmCallback.value = options.onConfirm || null;
+      confirmCancelCallback.value = options.onCancel || null;
+      confirmVisible.value = true;
+    };
 
-    handleConfirmConfirm() {
-      this.confirmVisible = false;
-      if (this.confirmCallback) {
-        this.confirmCallback();
+    const handleConfirmConfirm = () => {
+      confirmVisible.value = false;
+      if (confirmCallback.value) {
+        confirmCallback.value();
       }
-    },
+    };
 
-    handleConfirmCancel() {
-      this.confirmVisible = false;
-      if (this.confirmCancelCallback) {
-        this.confirmCancelCallback();
+    const handleConfirmCancel = () => {
+      confirmVisible.value = false;
+      if (confirmCancelCallback.value) {
+        confirmCancelCallback.value();
       }
-    },
+    };
 
-    getModalIconClass(type) {
+    const getModalIconClass = (type) => {
       const icons = {
         info: 'icon-info',
         success: 'icon-success',
@@ -228,31 +239,55 @@ export default {
         error: 'icon-error'
       };
       return icons[type] || 'icon-info';
-    },
+    };
 
-    toggleSidebar() {
-      this.sidebarCollapsed = !this.sidebarCollapsed;
-    },
+    const toggleSidebar = () => {
+      sidebarCollapsed.value = !sidebarCollapsed.value;
+    };
 
-    loadUserInfo() {
+    // 切换一级菜单的展开/收缩状态
+    const toggleMenu = (menuId) => {
+      // 如果侧边栏是收缩状态，不处理菜单展开/收缩
+      if (sidebarCollapsed.value) return;
+
+      // 使用 Vue 3 的响应式系统直接设置属性
+      collapsedMenus[menuId] = !collapsedMenus[menuId];
+    };
+
+    // 检查菜单是否激活
+    const isMenuActive = (menu) => {
+      // 检查当前路由是否匹配该菜单或其子菜单
+      if (route.path === menu.path) {
+        return true;
+      }
+
+      if (menu.children) {
+        return menu.children.some(child => route.path === child.path);
+      }
+
+      return false;
+    };
+
+    const loadUserInfo = () => {
       const userInfoStr = localStorage.getItem('user_info');
       if (userInfoStr) {
         try {
-          this.currentUser = JSON.parse(userInfoStr);
-          this.username = this.currentUser.uname || this.currentUser.username || '用户';
+          currentUser.value = JSON.parse(userInfoStr);
+          username.value = currentUser.value.uname || currentUser.value.username || '用户';
         } catch (e) {
           console.error('解析用户信息失败', e);
         }
       }
-    },
+    };
 
-    async loadUserMenus() {
+    const loadUserMenus = async () => {
       try {
         // 首先尝试从本地存储获取缓存的菜单
         const cachedMenus = localStorage.getItem('user_menus');
         if (cachedMenus) {
           try {
-            this.menus = JSON.parse(cachedMenus);
+            menus.value = JSON.parse(cachedMenus);
+            initCollapsedMenus();
             return;
           } catch (e) {
             console.error('解析缓存菜单失败', e);
@@ -260,18 +295,30 @@ export default {
         }
 
         // 如果没有缓存，从服务器获取
-        const menus = await menuService.getUserMenus();
-        if (menus && menus.length > 0) {
-          this.menus = menus;
+        const menusData = await menuService.getUserMenus();
+        if (menusData && menusData.length > 0) {
+          menus.value = menusData;
+          initCollapsedMenus();
         }
       } catch (error) {
         console.error('加载用户菜单失败:', error);
       }
-    },
+    };
 
-    handleLogout() {
+    // 初始化菜单展开/收缩状态
+    const initCollapsedMenus = () => {
+      // 默认所有一级菜单都是收缩的
+      menus.value.forEach(menu => {
+        if (menu.children && menu.children.length > 0) {
+          // 使用 Vue 3 的响应式系统直接设置属性
+          collapsedMenus[menu.id] = true;
+        }
+      });
+    };
+
+    const handleLogout = () => {
       // 使用全局统一的确认弹窗
-      this.showConfirm({
+      showConfirm({
         title: '确认退出',
         message: '确定要退出登录吗？',
         type: 'warning',
@@ -290,9 +337,51 @@ export default {
           menuService.clearCache();
 
           // 跳转到登录页面
-          this.$router.push('/');
+          router.push('/');
         }
       });
+    };
+
+    onMounted(() => {
+      // 动态注入图标样式
+      if (!document.getElementById('menu-icons-style')) {
+        const style = document.createElement('style')
+        style.id = 'menu-icons-style'
+        style.textContent = menuIconCSS
+        document.head.appendChild(style)
+      }
+
+      loadUserInfo();
+      loadUserMenus();
+    });
+
+    return {
+      sidebarCollapsed,
+      collapsedMenus,
+      currentUser,
+      username,
+      userRole,
+      menus,
+      toasts,
+      confirmVisible,
+      confirmTitle,
+      confirmMessage,
+      confirmType,
+      confirmConfirmText,
+      confirmCancelText,
+      currentPageTitle,
+      // 方法
+      showToast,
+      removeToast,
+      getToastIconClass,
+      showConfirm,
+      handleConfirmConfirm,
+      handleConfirmCancel,
+      getModalIconClass,
+      toggleSidebar,
+      toggleMenu,
+      isMenuActive,
+      handleLogout
     }
   }
 }
@@ -609,6 +698,28 @@ html, body {
   margin: 5px 0;
 }
 
+/* 一级菜单项样式 */
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  transition: all 0.3s;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.menu-item.has-children {
+  justify-content: space-between;
+}
+
 .sidebar-nav a {
   display: flex;
   align-items: center;
@@ -632,10 +743,29 @@ html, body {
   margin-right: 15px;
 }
 
+/* 箭头图标 */
+.arrow-icon {
+  margin-left: auto;
+  margin-right: 0;
+  transition: transform 0.3s ease;
+  font-size: 0.8rem;
+}
+
+.arrow-icon.rotated {
+  transform: rotate(180deg);
+}
+
 /* 子菜单样式 */
 .submenu {
   padding-left: 0;
   background: rgba(0, 0, 0, 0.2);
+  max-height: 1000px;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.submenu.collapsed {
+  max-height: 0;
 }
 
 .submenu li {

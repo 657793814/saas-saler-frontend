@@ -49,6 +49,7 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
+        <el-table-column prop="order" label="排序" width="100"/>
         <el-table-column label="状态" width="100">
           <template #default="scope">
             <el-tag :type="scope.row.enable === 1 ? 'success' : 'danger'">
@@ -113,7 +114,9 @@
         <el-form-item label="图标" prop="icon">
           <el-input v-model="form.icon" placeholder="请输入图标类名"/>
         </el-form-item>
-
+        <el-form-item label="排序" prop="icon">
+          <el-input v-model="form.order" placeholder="排序值"/>
+        </el-form-item>
         <el-form-item label="状态" prop="enable">
           <el-radio-group v-model="form.enable">
             <el-radio :label="1">启用</el-radio>
@@ -183,6 +186,7 @@ export default {
       path: '',
       icon: '',
       enable: 1,
+      order: 0,
     });
 
     // 表单验证规则
@@ -302,6 +306,7 @@ export default {
         path: '',
         icon: '',
         enable: 1,
+        order: 0,
         parentCode: ''
       });
     };
@@ -323,6 +328,7 @@ export default {
         path: '',
         icon: '',
         enable: 1,
+        order: 0,
         parentCode: row.code
       });
     };
@@ -338,6 +344,7 @@ export default {
         path: row.path,
         icon: row.icon,
         enable: row.enable,
+        order: row.order,
         parentCode: row.parentCode || ''
       });
     };
