@@ -3,56 +3,43 @@ import apiRequest from './request';
 
 class SpecService {
     // 获取规格列表
-    async getSpecifications(params = {}) {
+    async getSpecDataPage(params = {}) {
         try {
-            // 模拟API调用
-            const result = await apiRequest.get('/api/specifications', {params});
+            const result = await apiRequest.post('/api/products/spec_page', params);
             return result;
         } catch (error) {
             console.error('获取规格列表错误:', error);
-            // 返回模拟数据用于演示
-            return {
-                code: 0,
-                data: {
-                    list: [
-                        {id: 1, name: '颜色', values: ['红色', '蓝色', '绿色']},
-                        {id: 2, name: '尺寸', values: ['S', 'M', 'L', 'XL']}
-                    ],
-                    total: 2
-                }
-            };
         }
     }
 
-    // 创建规格
-    async createSpecification(specData) {
+    // 规格类型下创建规格值
+    async addSpecValueToType(specData) {
         try {
-            const result = await apiRequest.post('/api/specifications', specData);
+            const result = await apiRequest.post('/api/products/create_spec_value', specData);
             return result;
         } catch (error) {
-            console.error('创建规格错误:', error);
+            console.error('创建规格值错误:', error);
             throw error;
         }
     }
 
-    // 更新规格
-    async updateSpecification(specData) {
+    async updateSpecTypeStatus(data) {
         try {
-            const result = await apiRequest.put(`/api/specifications/${specData.id}`, specData);
+            const result = await apiRequest.post(`/api/products/update_spec_type_status`, data);
             return result;
         } catch (error) {
-            console.error('更新规格错误:', error);
+            console.error('更新规格类型状态错误:', error);
             throw error;
         }
     }
 
-    // 删除规格
-    async deleteSpecification(specId) {
+    // 更新规格值状态
+    async updateSpecValueStatus(data) {
         try {
-            const result = await apiRequest.delete(`/api/specifications/${specId}`);
+            const result = await apiRequest.post(`/api/products/update_spec_value_status`, data);
             return result;
         } catch (error) {
-            console.error('删除规格错误:', error);
+            console.error('更新规格值状态错误:', error);
             throw error;
         }
     }

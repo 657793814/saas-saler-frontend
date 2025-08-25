@@ -12,10 +12,10 @@
       <!-- 搜索区域 -->
       <div class="search-area">
         <el-form :inline="true" :model="searchForm" class="demo-form-inline">
-          <el-form-item label="商品名称">
+          <el-form-item label="产品名称">
             <el-input v-model="searchForm.name" placeholder="商品名称" clearable/>
           </el-form-item>
-          <el-form-item label="商品编码">
+          <el-form-item label="产品code">
             <el-input v-model="searchForm.code" placeholder="商品编码" clearable/>
           </el-form-item>
           <el-form-item>
@@ -70,14 +70,21 @@
                   <span v-else>无图片</span>
                 </template>
               </el-table-column>
+              <el-table-column prop="status" label="状态" width="100">
+                <template #default="scope">
+                  <el-tag :type="scope.row.enable === 1 ? 'success' : 'danger'">
+                    {{ scope.row.enable === 1 ? '上架' : '下架' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="操作" width="150">
                 <template #default="scope">
                   <el-button
                       size="small"
-                      :type="scope.row.status === 1 ? 'warning' : 'success'"
+                      :type="scope.row.enable === 1 ? 'warning' : 'success'"
                       @click="toggleSkuStatus(scope.row, props.row)"
                   >
-                    {{ scope.row.status === 1 ? '下架' : '上架' }}
+                    {{ scope.row.enable === 1 ? '下架' : '上架' }}
                   </el-button>
                 </template>
               </el-table-column>
@@ -110,8 +117,8 @@
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100">
           <template #default="scope">
-            <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'">
-              {{ scope.row.status === 1 ? '上架' : '下架' }}
+            <el-tag :type="scope.row.enable === 1 ? 'success' : 'danger'">
+              {{ scope.row.enable === 1 ? '上架' : '下架' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -119,10 +126,10 @@
           <template #default="scope">
             <el-button
                 size="small"
-                :type="scope.row.status === 1 ? 'warning' : 'success'"
+                :type="scope.row.enable === 1 ? 'warning' : 'success'"
                 @click="toggleProductStatus(scope.row)"
             >
-              {{ scope.row.status === 1 ? '下架' : '上架' }}
+              {{ scope.row.enable === 1 ? '下架' : '上架' }}
             </el-button>
             <el-button
                 size="small"
@@ -269,11 +276,11 @@ export default {
     const toggleProductStatus = async (row) => {
       let newStatus;
       try {
-        const newStatus = row.status === 1 ? 0 : 1;
-        const result = await productService.updateProductStatus(row.id, newStatus);
+        const newStatus = row.enable === 1 ? 0 : 1;
+        const result = await productService.updateProductStatus({productId: row.productId, enable: newStatus});
         if (result.code === 0) {
           ElMessage.success(`${newStatus === 1 ? '上架' : '下架'}成功`);
-          row.status = newStatus;
+          row.enable = newStatus;
         } else {
           ElMessage.error(result.msg || `${newStatus === 1 ? '上架' : '下架'}失败`);
         }
@@ -286,11 +293,11 @@ export default {
     const toggleSkuStatus = async (skuRow) => {
       let newStatus;
       try {
-        const newStatus = skuRow.status === 1 ? 0 : 1;
-        const result = await productService.updateSkuStatus(skuRow.id, newStatus);
+        const newStatus = skuRow.enable === 1 ? 0 : 1;
+        const result = await productService.updateSkuStatus({skuId: skuRow.skuId, enable: newStatus});
         if (result.code === 0) {
           ElMessage.success(`${newStatus === 1 ? '上架' : '下架'}成功`);
-          skuRow.status = newStatus;
+          skuRow.enable = newStatus;
         } else {
           ElMessage.error(result.msg || `${newStatus === 1 ? '上架' : '下架'}失败`);
         }

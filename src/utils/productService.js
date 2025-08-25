@@ -44,21 +44,20 @@ class ProductService {
         }
     }
 
-    // 更新商品
-    async updateProduct(productData) {
+
+    async updateProductStatus(data) {
         try {
-            const result = await apiRequest.put(`/api/products/${productData.id}`, productData);
+            const result = await apiRequest.post(`/api/products/update_product_status`, data);
             return result;
         } catch (error) {
-            console.error('更新商品错误:', error);
+            console.error('删除商品错误:', error);
             throw error;
         }
     }
 
-    // 删除商品
-    async deleteProduct(productId) {
+    async updateSkuStatus(data) {
         try {
-            const result = await apiRequest.delete(`/api/products/${productId}`);
+            const result = await apiRequest.post(`/api/products/update_sku_status`, data);
             return result;
         } catch (error) {
             console.error('删除商品错误:', error);

@@ -1,4 +1,3 @@
-<!-- src/views/products/Specifications.vue -->
 <template>
   <div class="specifications">
     <el-card>
@@ -9,27 +8,123 @@
         </div>
       </template>
 
+      <!-- 查询条件 -->
+      <div class="search-container">
+        <el-form :inline="true" :model="searchForm" class="demo-form-inline">
+          <el-form-item label="规格名称">
+            <el-input
+                v-model="searchForm.name"
+                placeholder="请输入规格名称"
+                clearable
+                @keyup.enter="handleSearch"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="handleSearch">查询</el-button>
+            <el-button @click="handleReset">重置</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+
       <!-- 规格列表 -->
       <el-table :data="specifications" style="width: 100%" v-loading="loading" border>
-        <el-table-column prop="id" label="ID" width="80"/>
-        <el-table-column prop="name" label="规格名称" width="180"/>
-        <el-table-column prop="values" label="规格值">
+        <!-- 展开列 -->
+        <el-table-column type="expand">
+          <template #default="props">
+            <div class="spec-values-container">
+              <!-- 新增规格值表单 -->
+              <div class="add-spec-value-form">
+                <el-input
+                    v-model="newSpecValueInputs[props.row.specTypeId]"
+                    placeholder="请输入新的规格值"
+                    style="width: 200px; margin-right: 10px;"
+                    @keyup.enter="addSpecValueToType(props.row)"
+                />
+                <el-button
+                    type="primary"
+                    size="small"
+                    @click="addSpecValueToType(props.row)"
+                    :loading="addValueLoading[props.row.specTypeId]"
+                >
+                  新增规格值
+                </el-button>
+              </div>
+
+              <!-- 规格值列表 -->
+              <el-table
+                  :data="props.row.specValues"
+                  style="width: 100%"
+                  :show-header="false"
+                  class="nested-table"
+              >
+                <el-table-column prop="specValue" label="规格值" width="200"/>
+                <el-table-column label="状态" width="100">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.enable === 1 ? 'success' : 'info'">
+                      {{ scope.row.enable === 1 ? '启用' : '禁用' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="150">
+                  <template #default="scope">
+                    <el-button
+                        v-if="scope.row.enable === 1"
+                        size="small"
+                        type="warning"
+                        @click="toggleSpecValueStatus(scope.row, 0, props.row.specTypeId)"
+                    >
+                      禁用
+                    </el-button>
+                    <el-button
+                        v-else
+                        size="small"
+                        type="success"
+                        @click="toggleSpecValueStatus(scope.row, 1, props.row.specTypeId)"
+                    >
+                      启用
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="specTypeId" label="ID" width="80"/>
+        <el-table-column prop="specTypeName" label="规格名称" width="180"/>
+        <el-table-column label="规格值数量" width="120">
           <template #default="scope">
-            <el-tag
-                v-for="value in scope.row.values"
-                :key="value"
-                style="margin-right: 5px; margin-bottom: 5px;"
-            >
-              {{ value }}
+            {{ scope.row.specValues ? scope.row.specValues.length : 0 }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="scope.row.enable === 1 ? 'success' : 'info'">
+              {{ scope.row.enable === 1 ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="150">
           <template #default="scope">
-            <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+            <el-button
+                v-if="scope.row.enable === 1"
+                size="small"
+                type="warning"
+                @click="toggleSpecTypeStatus(scope.row)"
+            >
+              禁用
+            </el-button>
+            <el-button
+                v-else
+                size="small"
+                type="success"
+                @click="toggleSpecTypeStatus(scope.row)"
+            >
+              启用
+            </el-button>
           </template>
         </el-table-column>
+
       </el-table>
 
       <!-- 分页 -->
@@ -46,49 +141,6 @@
       </div>
     </el-card>
 
-    <!-- 规格编辑对话框 -->
-    <el-dialog
-        :title="dialogTitle"
-        v-model="dialogVisible"
-        width="600px"
-        @close="handleDialogClose"
-    >
-      <el-form
-          :model="form"
-          :rules="specRules"
-          ref="specFormRef"
-          label-width="100px"
-      >
-        <el-form-item label="规格名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入规格名称"/>
-        </el-form-item>
-        <el-form-item label="规格值" prop="values">
-          <el-select
-              v-model="form.values"
-              multiple
-              filterable
-              allow-create
-              default-first-option
-              placeholder="请输入规格值，可创建新值"
-              style="width: 100%"
-          >
-            <el-option
-                v-for="item in form.values"
-                :key="item"
-                :label="item"
-                :value="item"
-            />
-          </el-select>
-          <div class="form-tip">输入规格值后按回车确认，可添加多个规格值</div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="submitSpec" :loading="submitLoading">确定</el-button>
-        </span>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -106,6 +158,15 @@ export default {
     const dialogVisible = ref(false);
     const isEditMode = ref(false);
     const specFormRef = ref(null);
+    const newSpecValue = ref(''); // 新增规格值输入框
+    const availableSpecValues = ref([]); // 可选的规格值
+    const newSpecValueInputs = ref({}); // 每个规格类型的新增规格值输入框
+    const addValueLoading = ref({}); // 每个规格类型新增规格值的加载状态
+
+    // 查询表单
+    const searchForm = reactive({
+      name: ''
+    });
 
     // 分页
     const pagination = reactive({
@@ -116,17 +177,17 @@ export default {
 
     // 规格表单
     const form = reactive({
-      id: null,
-      name: '',
-      values: []
+      specTypeId: null,
+      specTypeName: '',
+      specValues: []
     });
 
     // 表单验证规则
     const specRules = {
-      name: [
+      specTypeName: [
         {required: true, message: '请输入规格名称', trigger: 'blur'}
       ],
-      values: [
+      specValues: [
         {required: true, message: '请添加至少一个规格值', trigger: 'change'}
       ]
     };
@@ -140,14 +201,24 @@ export default {
       loading.value = true;
       try {
         const params = {
-          page: pagination.currentPage,
+          current: pagination.currentPage,
           size: pagination.pageSize
         };
 
-        const result = await specService.getSpecifications(params);
+        // 添加查询条件
+        if (searchForm.name && searchForm.name.trim() !== '') {
+          params.name = searchForm.name.trim();
+        }
+
+        const result = await specService.getSpecDataPage(params);
         if (result.code === 0) {
-          specifications.value = result.data.list || [];
+          specifications.value = result.data.records || [];
           pagination.total = result.data.total || 0;
+
+          // 初始化每个规格类型的新增规格值输入框
+          specifications.value.forEach(spec => {
+            newSpecValueInputs.value[spec.specTypeId] = '';
+          });
         } else {
           ElMessage.error(result.msg || '获取规格列表失败');
         }
@@ -158,33 +229,65 @@ export default {
       }
     };
 
+    // 查询
+    const handleSearch = () => {
+      pagination.currentPage = 1; // 查询时重置到第一页
+      fetchSpecifications();
+    };
+
+    // 重置查询条件
+    const handleReset = () => {
+      searchForm.name = '';
+      pagination.currentPage = 1;
+      fetchSpecifications();
+    };
+
+    // 切换规格类型状态（启用/禁用）
+    const toggleSpecTypeStatus = (row) => {
+      const action = row.enable === 1 ? '禁用' : '启用';
+      ElMessageBox.confirm(
+          `确定要${action}规格 "${row.specTypeName}" 吗？`,
+          '确认操作',
+          {
+            confirmButtonText: '确定',
+            cancelButtonText: '取消',
+            type: 'warning'
+          }
+      ).then(async () => {
+        try {
+          const newStatus = row.enable === 1 ? 0 : 1;
+          const result = await specService.updateSpecTypeStatus({specTypeId: row.specTypeId, enable: newStatus});
+          if (result.code === 0) {
+            ElMessage.success(`${action}成功`);
+            await fetchSpecifications();
+          } else {
+            ElMessage.error(result.msg || `${action}失败`);
+          }
+        } catch (error) {
+          ElMessage.error(`${action}出错`);
+        }
+      }).catch(() => {
+        // 用户取消操作
+      });
+    };
+
     // 新增规格
     const handleAdd = () => {
       isEditMode.value = false;
       dialogVisible.value = true;
       // 重置表单
       Object.assign(form, {
-        id: null,
-        name: '',
-        values: []
+        specTypeId: null,
+        specTypeName: '',
+        specValues: []
       });
-    };
-
-    // 编辑规格
-    const handleEdit = (row) => {
-      isEditMode.value = true;
-      dialogVisible.value = true;
-      Object.assign(form, {
-        id: row.id,
-        name: row.name,
-        values: [...row.values]  // 创建副本避免引用问题
-      });
+      newSpecValue.value = '';
     };
 
     // 删除规格
     const handleDelete = (row) => {
       ElMessageBox.confirm(
-          `确定要删除规格 "${row.name}" 吗？`,
+          `确定要删除规格 "${row.specTypeName}" 吗？`,
           '确认删除',
           {
             confirmButtonText: '确定',
@@ -193,10 +296,10 @@ export default {
           }
       ).then(async () => {
         try {
-          const result = await specService.deleteSpecification(row.id);
+          const result = await specService.deleteSpecification(row.specTypeId);
           if (result.code === 0) {
             ElMessage.success('删除成功');
-            fetchSpecifications();
+            await fetchSpecifications();
           } else {
             ElMessage.error(result.msg || '删除失败');
           }
@@ -208,35 +311,86 @@ export default {
       });
     };
 
-    // 提交规格（新增或编辑）
-    const submitSpec = async () => {
-      if (!specFormRef.value) return;
-
-      await specFormRef.value.validate(async (valid) => {
-        if (valid) {
-          submitLoading.value = true;
-          try {
-            let result;
-            if (isEditMode.value) {
-              result = await specService.updateSpecification(form);
-            } else {
-              result = await specService.createSpecification(form);
+    // 切换规格值状态（启用/禁用）
+    const toggleSpecValueStatus = async (specValue, status, specTypeId) => {
+      const action = status === 1 ? '启用' : '禁用';
+      try {
+        const result = await specService.updateSpecValueStatus({specValueId: specValue.specId, enable: status});
+        if (result.code === 0) {
+          ElMessage.success(`${action}成功`);
+          // 更新本地数据
+          const spec = specifications.value.find(s => s.specTypeId === specTypeId);
+          if (spec) {
+            const value = spec.specValues.find(v => v.specId === specValue.specId);
+            if (value) {
+              value.enable = status;
             }
-
-            if (result.code === 0) {
-              ElMessage.success(`${isEditMode.value ? '更新' : '创建'}成功`);
-              dialogVisible.value = false;
-              fetchSpecifications();
-            } else {
-              ElMessage.error(result.msg || `${isEditMode.value ? '更新' : '创建'}失败`);
-            }
-          } catch (error) {
-            ElMessage.error(`${isEditMode.value ? '更新' : '创建'}出错`);
-          } finally {
-            submitLoading.value = false;
           }
+        } else {
+          ElMessage.error(result.msg || `${action}失败`);
         }
-      });
+      } catch (error) {
+        ElMessage.error(`${action}出错`);
+      }
+    };
+
+    // 为指定规格类型新增规格值
+    const addSpecValueToType = async (specType) => {
+      const inputValue = newSpecValueInputs.value[specType.specTypeId];
+      if (!inputValue || inputValue.trim() === '') {
+        ElMessage.warning('请输入规格值');
+        return;
+      }
+
+      // 检查是否已存在
+      const exists = specType.specValues.some(item => item.specValue === inputValue.trim());
+      if (exists) {
+        ElMessage.warning('该规格值已存在');
+        return;
+      }
+
+      try {
+        // 设置加载状态
+        addValueLoading.value[specType.specTypeId] = true;
+
+        const result = await specService.addSpecValueToType({
+          specTypeId: specType.specTypeId,
+          specValue: inputValue.trim()
+        });
+
+        if (result.code === 0) {
+          ElMessage.success('新增规格值成功');
+          // 清空输入框
+          newSpecValueInputs.value[specType.specTypeId] = '';
+          // 刷新列表
+          await fetchSpecifications();
+        } else {
+          ElMessage.error(result.msg || '新增规格值失败');
+        }
+      } catch (error) {
+        ElMessage.error('新增规格值出错');
+      } finally {
+        addValueLoading.value[specType.specTypeId] = false;
+      }
+    };
+
+    // 添加规格值（用于新增/编辑规格对话框）
+    const addSpecValue = () => {
+      if (newSpecValue.value.trim() !== '') {
+        // 检查是否已存在
+        const exists = form.specValues.some(item => item.specValue === newSpecValue.value.trim());
+        if (!exists) {
+          form.specValues.push({
+            specValue: newSpecValue.value.trim()
+          });
+        }
+        newSpecValue.value = '';
+      }
+    };
+
+    // 移除规格值（用于新增/编辑规格对话框）
+    const removeSpecValue = (index) => {
+      form.specValues.splice(index, 1);
     };
 
     // 关闭对话框时的清理工作
@@ -244,6 +398,7 @@ export default {
       if (specFormRef.value) {
         specFormRef.value.resetFields();
       }
+      newSpecValue.value = '';
     };
 
     // 分页相关方法
@@ -272,11 +427,21 @@ export default {
       specRules,
       dialogTitle,
       specFormRef,
+      newSpecValue,
+      availableSpecValues,
+      newSpecValueInputs,
+      addValueLoading,
+      searchForm,
       fetchSpecifications,
+      handleSearch,
+      handleReset,
+      toggleSpecTypeStatus,
       handleAdd,
-      handleEdit,
       handleDelete,
-      submitSpec,
+      toggleSpecValueStatus,
+      addSpecValueToType,
+      addSpecValue,
+      removeSpecValue,
       handleDialogClose,
       handleSizeChange,
       handleCurrentChange
@@ -290,6 +455,13 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.search-container {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
 }
 
 .pagination-container {
@@ -306,5 +478,23 @@ export default {
   font-size: 12px;
   color: #909399;
   margin-top: 5px;
+}
+
+.nested-table {
+  background-color: #f5f7fa;
+  margin-top: 10px;
+}
+
+.spec-values-container {
+  padding: 10px 20px;
+}
+
+.add-spec-value-form {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 10px;
+  background-color: #f0f2f5;
+  border-radius: 4px;
 }
 </style>
