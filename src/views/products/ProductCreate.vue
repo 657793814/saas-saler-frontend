@@ -3,7 +3,7 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>新增商品</span>
+          <span>{{ isEditMode.value ? '编辑商品' : '新增商品' }}</span>
         </div>
       </template>
 
@@ -161,8 +161,23 @@
             <el-table-column label="规格组合" width="300">
               <template #default="scope">
                 <span>{{ formatSpecCombination(scope.row.specifications) }}</span>
+                <el-tag
+                    v-if="typeof scope.row.id === 'string' && scope.row.id.startsWith('new_')"
+                    type="warning"
+                    size="mini"
+                    style="margin-left: 10px;">
+                  新增
+                </el-tag>
+                <el-tag
+                    v-else-if="scope.row.skuId && scope.row.skuId > 0"
+                    type="success"
+                    size="mini"
+                    style="margin-left: 10px;">
+                  已存在
+                </el-tag>
               </template>
             </el-table-column>
+
             <el-table-column prop="price" label="销售价" width="150">
               <template #default="scope">
                 <el-input-number
@@ -304,7 +319,7 @@
 </template>
 
 <script>
-import {computed, nextTick, onMounted, reactive, ref} from 'vue'
+import {computed, nextTick, onMounted, reactive, ref, watch} from 'vue'
 import {ElMessage} from 'element-plus'
 import CryptoJS from 'crypto-js';
 import productService from "@/utils/productService";
@@ -312,6 +327,7 @@ import {debounce} from 'lodash';
 import {QuillEditor} from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 import apiRequest from "@/utils/request";
+import {useRoute} from "vue-router";
 
 export default {
   name: 'ProductCreate',
@@ -319,6 +335,133 @@ export default {
     QuillEditor
   },
   setup() {
+
+    //编辑
+    const isEditMode = ref(false);
+    const route = useRoute()
+
+    // 获取商品详情
+    const fetchProductDetail = async (productId) => {
+
+      if (productId == 0 || productId == undefined) {
+        return;
+      }
+
+      try {
+        const params = {
+          productId: productId,
+        };
+
+        const result = await productService.getProductDetail(params);
+        if (result.code === 0) {
+          console.log('获取商品详情成功:', result.data)
+          await editProductInit(result.data);
+        } else {
+          ElMessage.error(result.msg || '获取商品详情失败');
+        }
+      } catch (error) {
+        ElMessage.error('获取商品详情出错: ' + error.message);
+      } finally {
+        isEditMode.value = true;
+      }
+    }
+
+    // 监听路由变化
+    watch(
+        () => route.query.productId,
+        (newProductId, oldProductId) => {
+          if (newProductId) {
+            console.log('Product ID changed from:', oldProductId)
+            console.log('Product ID changed to:', newProductId)
+            // 处理 productId 变化
+            fetchProductDetail(newProductId)
+          }
+        },
+        {immediate: true} // 立即执行一次
+    )
+
+    //编辑商品页面初始化
+    const editProductInit = async (productData) => {
+      productForm.title = productData.title || '';
+      productForm.summary = productData.summary || '';
+      productForm.description = productData.description || '';
+
+      // 填充商品图片
+      if (productData.imageUrls && productData.imageUrls.length > 0) {
+        // imgObj ：{url:"",path:""}
+        productForm.images = productData.imageUrls.map((imgObj, index) => ({
+          url: imgObj.url,
+          path: imgObj.path,
+          name: `image_${index}`,
+          uid: index
+        }));
+      }
+
+      // 填充SKU信息到规格系统
+      if (productData.skus && productData.skus.length > 0) {
+        // 提取所有规格类型和规格值
+        const specMap = new Map(); // 用于存储规格类型信息
+
+        // 处理SKU数据并提取规格信息
+        const processedSkus = productData.skus.map((sku, index) => {
+
+          console.log("sku index;" + index + " sku:", sku);
+
+          // 处理规格信息
+          sku.specifications.forEach(spec => {
+            // 如果规格类型不存在，则添加
+            if (!specMap.has(spec.specId)) {
+              specMap.set(spec.specId, {
+                id: spec.specId,
+                name: spec.specName,
+                values: []
+              });
+            }
+
+            // 获取当前规格类型
+            const specInfo = specMap.get(spec.specId);
+
+            // 检查规格值是否已存在
+            const valueExists = specInfo.values.some(v => v.id === spec.valueId);
+            if (!valueExists) {
+              specInfo.values.push({
+                id: spec.valueId,
+                value: spec.value
+              });
+            }
+          });
+
+          // 返回处理后的SKU对象
+          const imageObj = sku.imageObj;
+          return {
+            id: index + 1,
+            skuId: sku.skuId,  //编辑时有值
+            specifications: sku.specifications,
+            price: sku.price || 0,
+            costPrice: sku.costPrice || 0,
+            stock: sku.stock || 0,
+            image: imageObj.url || '', // 完整图片URL
+            imgPath: imageObj.path || '' // 图片路径
+          };
+        });
+
+        // 将规格信息填充到页面
+        specifications.value = Array.from(specMap.values());
+        selectedSpecs.value = Array.from(specMap.keys());
+
+        // 初始化新规格值对象
+        specifications.value.forEach(spec => {
+          newSpecValues[spec.id] = '';
+        });
+
+        // 保存处理后的SKU数据
+        productForm.skus = processedSkus;
+
+      }
+    }
+
+    /** 以下商品创建逻辑  **/
+
     const productFormRef = ref(null)
     const loading = ref(false)
     const submitLoading = ref(false)
@@ -344,13 +487,14 @@ export default {
       title: '',
       summary: '',
       description: '',
-      images: []
+      images: [],
+      skus: []
     })
 
     // 规格相关
-    const specifications = ref([])
-    const selectedSpecs = ref([])
-    const newSpecValues = reactive({})
+    const specifications = ref([]); //标记所有规格类型
+    const selectedSpecs = ref([]);  //标记选中的规格类型ID集合
+    const newSpecValues = reactive({}); //标记规格类型下面的新增规格值
 
     // 表单验证规则
     const productRules = {
@@ -367,31 +511,86 @@ export default {
 
     // 计算SKU列表
     const skuList = computed(() => {
-      if (selectedSpecs.value.length === 0) return []
+      // 如果没有选择任何规格，返回空数组
+      if (selectedSpecs.value.length === 0) return [];
 
-      // 获取选中规格的值组合
-      const specValues = selectedSpecs.value.map(specId => {
-        const spec = specifications.value.find(s => s.id === specId)
-        return spec.values.map(value => ({
+      // 获取当前选中的规格值组合
+      const currentSpecValues = selectedSpecs.value.map(specId => {
+        const spec = specifications.value.find(s => s.id === specId);
+        return spec ? spec.values.map(value => ({
           specId,
           specName: spec.name,
           valueId: value.id,
           value: value.value
-        }))
-      })
+        })) : [];
+      });
 
+      // 如果是编辑模式且已有SKU数据
+      if (isEditMode.value && productForm.skus && productForm.skus.length > 0) {
+        // 生成当前规格的笛卡尔积
+        const currentCombinations = cartesianProduct(currentSpecValues);
+
+        // 创建一个映射来存储已有的SKU数据，便于快速查找
+        const existingSkuMap = new Map();
+
+        // 为每个已有的SKU创建一个唯一的规格组合键
+        productForm.skus.forEach(sku => {
+          if (sku.specifications && sku.specifications.length > 0) {
+            const specKey = sku.specifications
+                .map(spec => `${spec.specId}-${spec.valueId}`)
+                .sort()
+                .join('|');
+            existingSkuMap.set(specKey, sku);
+          }
+        });
+
+        // 合并已有的SKU和新生成的SKU组合
+        const mergedSkus = currentCombinations.map((combination, index) => {
+          // 为当前组合创建唯一键
+          const combinationKey = combination
+              .map(spec => `${spec.specId}-${spec.valueId}`)
+              .sort()
+              .join('|');
+
+          // 检查是否已存在对应的SKU
+          if (existingSkuMap.has(combinationKey)) {
+            // 使用已有的SKU数据
+            return existingSkuMap.get(combinationKey);
+          } else {
+            // 创建新的SKU条目
+            return {
+              id: `new_${Date.now()}_${index}`, // 为新增的SKU创建唯一标识
+              skuId: 0,  //新增时为0
+              specifications: combination,
+              price: 0,
+              costPrice: 0,
+              stock: 0,
+              image: '',
+              imgPath: ''
+            };
+          }
+        });
+
+        return mergedSkus;
+      }
+
+      // 新增模式 或 没有SKU数据的情况
       // 生成笛卡尔积
-      const combinations = cartesianProduct(specValues)
+      const combinations = cartesianProduct(currentSpecValues);
 
       // 转换为SKU格式
       return combinations.map((combination, index) => ({
         id: index + 1,
+        skuId: 0,
         specifications: combination,
         price: 0,
         costPrice: 0,
-        stock: 0
-      }))
-    })
+        stock: 0,
+        image: '',
+        imgPath: ''
+      }));
+    });
+
 
     // 笛卡尔积计算函数
     const cartesianProduct = (arrays) => {
@@ -703,32 +902,60 @@ export default {
               }
             });
 
-            // 添加SKU数据
+            // 添加SKU数据 - 只提交有规格的SKU
             skuList.value.forEach((sku) => {
-              submitData.skus.push({
-                price: sku.price,
-                costPrice: sku.costPrice,
-                stock: sku.stock,
-                image: sku.imgPath || '', // 添加图片路径
-                specifications: sku.specifications.map(spec => ({
-                  specId: spec.specId,
-                  specName: spec.specName,
-                  valueId: spec.valueId,
-                  value: spec.value
-                }))
-              });
+              // 只处理有规格的SKU
+              if (sku.specifications && sku.specifications.length > 0) {
+                const skuData = {
+                  price: sku.price || 0,
+                  costPrice: sku.costPrice || 0,
+                  stock: sku.stock || 0,
+                  image: sku.imgPath || '', // 添加图片路径
+                  specifications: sku.specifications.map(spec => ({
+                    specId: spec.specId,
+                    specName: spec.specName,
+                    valueId: spec.valueId,
+                    value: spec.value
+                  }))
+                };
+
+                // 如果是已存在的SKU且有有效的skuId，添加skuId信息
+                if (sku.skuId && sku.skuId > 0) {
+                  skuData.skuId = sku.skuId;
+                }
+
+                // 如果是已存在的SKU且有有效的id且不是新增标识，添加id
+                if (typeof sku.id === 'number') {
+                  skuData.id = sku.id;
+                }
+
+                submitData.skus.push(skuData);
+              }
             });
 
-            const result = await productService.createProduct(submitData);
+            let result;
+            if (isEditMode.value && route.query.productId) {
+              submitData.id = route.query.productId;
+              result = await productService.editProduct(submitData);
+            } else {
+              result = await productService.createProduct(submitData);
+            }
 
             if (result.code === 0) {
-              ElMessage.success('商品创建成功');
-              resetForm();
+              ElMessage.success(isEditMode.value ? '商品更新成功' : '商品创建成功');
+              // 如果是编辑模式，重新加载数据以刷新页面
+              if (isEditMode.value && route.query.productId) {
+                // 重新获取商品详情数据
+                await fetchProductDetail(route.query.productId);
+              } else {
+                // 新增模式下重置表单
+                resetForm();
+              }
             } else {
-              ElMessage.error(result.msg || '商品创建失败');
+              ElMessage.error(result.msg || (isEditMode.value ? '商品更新失败' : '商品创建失败'));
             }
           } catch (error) {
-            ElMessage.error('商品创建失败: ' + (error.response?.data?.msg || error.message));
+            ElMessage.error((isEditMode.value ? '商品更新失败' : '商品创建失败') + ': ' + (error.response?.data?.msg || error.message));
           } finally {
             submitLoading.value = false;
           }
@@ -813,9 +1040,12 @@ export default {
     }
 
     return {
-      searchSpecTypes,
-      handleSpecTypePageChange,
-      handleSpecTypePageSizeChange,
+      //编辑商品
+      isEditMode,
+      fetchProductDetail,
+      editProductInit,
+
+      //创建商品
       productFormRef,
       loading,
       submitLoading,
@@ -845,7 +1075,11 @@ export default {
       formatSpecCombination,
       resetForm,
       submitForm,
-      // 新增的规格类型管理相关
+
+      // 规格类型管理相关
+      searchSpecTypes,
+      handleSpecTypePageChange,
+      handleSpecTypePageSizeChange,
       newSpecTypeName,
       addNewSpecType,
       removeSpecType,

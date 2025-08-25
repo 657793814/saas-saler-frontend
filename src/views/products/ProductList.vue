@@ -44,7 +44,7 @@
                 border
                 class="sku-table"
             >
-              <el-table-column prop="skuId" label="SKU ID" width="100"/>
+              <!--              <el-table-column prop="skuId" label="SKU ID" width="100"/>-->
               <el-table-column prop="code" label="商品code" width="200"/>
               <el-table-column prop="spec" label="规格" width="200"/>
               <el-table-column prop="price" label="销售价" width="120">
@@ -85,7 +85,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="productId" label="商品ID" width="80"/>
+        <!--        <el-table-column prop="productId" label="商品ID" width="80"/>-->
         <el-table-column prop="name" label="产品名称" min-width="200"/>
         <el-table-column prop="code" label="产品code" min-width="200"/>
         <el-table-column label="SKU数量" width="100">
@@ -233,8 +233,8 @@ export default {
     // 编辑商品
     const handleEdit = (row) => {
       router.push({
-        path: '/products/edit',
-        query: {productId: row.id}
+        path: '/products/product-edit',
+        query: {productId: row.productId}
       });
     };
 
@@ -250,10 +250,10 @@ export default {
           }
       ).then(async () => {
         try {
-          const result = await productService.deleteProduct(row.id);
+          const result = await productService.deleteProduct(row.productId);
           if (result.code === 0) {
             ElMessage.success('删除成功');
-            fetchProducts();
+            await fetchProducts();
           } else {
             ElMessage.error(result.msg || '删除失败');
           }

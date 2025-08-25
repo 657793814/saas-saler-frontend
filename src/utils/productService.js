@@ -24,6 +24,26 @@ class ProductService {
         }
     }
 
+    async editProduct(productData) {
+        try {
+            const result = await apiRequest.post('/api/products/edit', productData);
+            return result;
+        } catch (error) {
+            console.error('创建商品错误:', error);
+            throw error;
+        }
+    }
+
+    async getProductDetail(param) {
+        try {
+            const result = await apiRequest.get('/api/products/detail', param);
+            return result;
+        } catch (error) {
+            console.error('创建商品错误:', error);
+            throw error;
+        }
+    }
+
     // 更新商品
     async updateProduct(productData) {
         try {
