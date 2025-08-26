@@ -1,3 +1,4 @@
+<!-- src/views/products/ProductCreate.vue -->
 <template>
   <div class="product-create">
     <el-card>
@@ -37,6 +38,40 @@
               </el-form-item>
             </el-col>
 
+            <!-- 商品分类 -->
+            <el-col :span="12">
+              <el-form-item label="商品分类" prop="categoryIds">
+                <el-cascader
+                    v-model="productForm.categoryIds"
+                    :options="categoryOptions"
+                    :props="categoryProps"
+                    placeholder="请选择商品分类"
+                    clearable
+                    filterable
+                    style="width: 100%">
+                </el-cascader>
+              </el-form-item>
+            </el-col>
+
+            <!-- 运费模板 -->
+            <el-col :span="12">
+              <el-form-item label="运费模板" prop="shippingTemplateId">
+                <el-select
+                    v-model="productForm.shippingTemplateId"
+                    placeholder="请选择运费模板"
+                    clearable
+                    filterable
+                    style="width: 100%">
+                  <el-option
+                      v-for="template in shippingTemplates"
+                      :key="template.id"
+                      :label="template.templateName"
+                      :value="template.id">
+                  </el-option>
+                </el-select>
+              </el-form-item>
+            </el-col>
+
             <el-col :span="24">
               <el-form-item label="详细描述" prop="description">
                 <div class="quill-editor-container">
@@ -48,8 +83,6 @@
                 </div>
               </el-form-item>
             </el-col>
-
-
           </el-row>
         </el-card>
 
@@ -340,6 +373,20 @@ export default {
     const isEditMode = ref(false);
     const route = useRoute()
 
+    // 商品分类相关
+    const categoryOptions = ref([]); // 分类选项数据
+    const categoryProps = {
+      value: 'id',
+      label: 'name',
+      children: 'children',
+      expandTrigger: 'hover',
+      emitPath: false, // 只返回最后一级的值
+      checkStrictly: false // 可以选择任意一级
+    };
+
+    // 运费模板相关
+    const shippingTemplates = ref([]); // 运费模板数据
+
     // 获取商品详情
     const fetchProductDetail = async (productId) => {
 
@@ -385,6 +432,13 @@ export default {
       productForm.title = productData.title || '';
       productForm.summary = productData.summary || '';
       productForm.description = productData.description || '';
+      productForm.shippingTemplateId = productData.shippingTemplateId || null;
+
+      // 设置商品分类
+      if (productData.categoryIds && productData.categoryIds.length > 0) {
+        // 只设置最后一级分类ID
+        productForm.categoryIds = productData.categoryIds[productData.categoryIds.length - 1];
+      }
 
       // 填充商品图片
       if (productData.imageUrls && productData.imageUrls.length > 0) {
@@ -488,7 +542,9 @@ export default {
       summary: '',
       description: '',
       images: [],
-      skus: []
+      skus: [],
+      categoryIds: null, // 商品分类ID（最后一级）
+      shippingTemplateId: null // 运费模板ID
     })
 
     // 规格相关
@@ -506,6 +562,12 @@ export default {
       ],
       description: [
         {required: true, message: '请输入商品详细描述', trigger: 'blur'}
+      ],
+      categoryIds: [
+        {required: true, message: '请选择商品分类', trigger: 'change'}
+      ],
+      shippingTemplateId: [
+        {required: true, message: '请选择运费模板', trigger: 'change'}
       ]
     }
 
@@ -877,6 +939,73 @@ export default {
       return specs.map(spec => `${spec.specName}:${spec.value}`).join(' ');
     }
 
+    // 加载商品分类数据
+    const loadCategoryData = async () => {
+      try {
+        const result = await productService.getCategoryData();
+        if (result.code === 0) {
+          // 构建三级联动数据结构
+          categoryOptions.value = buildCategoryTree(result.data);
+        } else {
+          ElMessage.error(result.msg || '加载商品分类失败');
+        }
+      } catch (error) {
+        ElMessage.error('加载商品分类失败: ' + error.message);
+      }
+    };
+
+    // 构建分类树结构
+    const buildCategoryTree = (categories) => {
+      // 按层级分组
+      const level1 = categories.filter(item => item.level === 1);
+      const level2 = categories.filter(item => item.level === 2);
+      const level3 = categories.filter(item => item.level === 3);
+
+      // 构建三级结构
+      return level1.map(l1 => {
+        const l1Children = level2
+            .filter(l2 => l2.parentId === l1.id)
+            .map(l2 => {
+              const l2Children = level3
+                  .filter(l3 => l3.parentId === l2.id)
+                  .map(l3 => ({
+                    id: l3.id,
+                    name: l3.name,
+                    parentId: l3.parentId,
+                    level: l3.level
+                  }));
+              return {
+                id: l2.id,
+                name: l2.name,
+                parentId: l2.parentId,
+                level: l2.level,
+                children: l2Children.length > 0 ? l2Children : undefined
+              };
+            });
+        return {
+          id: l1.id,
+          name: l1.name,
+          parentId: l1.parentId,
+          level: l1.level,
+          children: l1Children.length > 0 ? l1Children : undefined
+        };
+      });
+    };
+
+    // 加载运费模板数据
+    const loadShippingTemplates = async () => {
+      try {
+        const result = await productService.getShippingTemplates();
+        if (result.code === 0) {
+          shippingTemplates.value = result.data || [];
+        } else {
+          ElMessage.error(result.msg || '加载运费模板失败');
+        }
+      } catch (error) {
+        ElMessage.error('加载运费模板失败: ' + error.message);
+      }
+    };
+
     // 提交表单
     const submitForm = async () => {
       if (!productFormRef.value) return;
@@ -890,6 +1019,8 @@ export default {
               title: productForm.title,
               summary: productForm.summary,
               description: productForm.description,
+              categoryId: productForm.categoryIds, // 分类ID
+              shippingTemplateId: productForm.shippingTemplateId, // 运费模板ID
               imageUrls: [],
               skus: []
             };
@@ -968,6 +1099,10 @@ export default {
       specifications.value.forEach(spec => {
         newSpecValues[spec.id] = '';
       });
+
+      // 加载商品分类和运费模板数据
+      loadCategoryData();
+      loadShippingTemplates();
     })
 
     // SKU图片预览相关方法
@@ -1037,6 +1172,8 @@ export default {
         spec.values = [];
       });
       productForm.description = '';
+      productForm.categoryIds = null;
+      productForm.shippingTemplateId = null;
     }
 
     return {
@@ -1075,6 +1212,13 @@ export default {
       formatSpecCombination,
       resetForm,
       submitForm,
+
+      // 商品分类和运费模板
+      categoryOptions,
+      categoryProps,
+      shippingTemplates,
+      loadCategoryData,
+      loadShippingTemplates,
 
       // 规格类型管理相关
       searchSpecTypes,

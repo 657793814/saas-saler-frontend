@@ -6,13 +6,14 @@ class MenuService {
     constructor() {
         this.menuCache = null;
         this.cacheTime = null;
-        this.cacheDuration = 5 * 60 * 1000; // 5分钟缓存
+        this.openMenuCache = false;  //是否开启menus缓存
+        this.cacheDuration = 1 * 60 * 1000; // 1分钟缓存
     }
 
     // 获取用户菜单
     async getUserMenus() {
         // 检查缓存
-        if (this.menuCache && this.cacheTime &&
+        if (this.openMenuCache && this.menuCache && this.cacheTime &&
             (Date.now() - this.cacheTime) < this.cacheDuration) {
             return this.menuCache;
         }

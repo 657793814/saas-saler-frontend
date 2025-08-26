@@ -138,13 +138,13 @@
             >
               编辑
             </el-button>
-            <el-button
-                size="small"
-                type="danger"
-                @click="handleDelete(scope.row)"
-            >
-              删除
-            </el-button>
+            <!--            <el-button-->
+            <!--                size="small"-->
+            <!--                type="danger"-->
+            <!--                @click="handleDelete(scope.row)"-->
+            <!--            >-->
+            <!--              删除-->
+            <!--            </el-button>-->
           </template>
         </el-table-column>
       </el-table>

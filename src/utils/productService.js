@@ -74,6 +74,26 @@ class ProductService {
             throw error;
         }
     }
+
+    async getCategoryData() {
+        try {
+            const result = await apiRequest.get(`/api/products/category_data`);
+            return result;
+        } catch (error) {
+            console.error('加载商品分类失败:', error);
+            throw error;
+        }
+    }
+
+    async getShippingTemplates() {
+        try {
+            const result = await apiRequest.get(`/api/products/shipping_template_data`);
+            return result;
+        } catch (error) {
+            console.error('加载商品分类失败:', error);
+            throw error;
+        }
+    }
 }
 
 const productService = new ProductService();

@@ -53,54 +53,52 @@
         </div>
 
         <nav class="sidebar-nav">
-          <ul>
-            <li v-for="menu in menus" :key="menu.id">
-              <div v-if="menu.children && menu.children.length > 0">
-                <!-- 有子菜单的一级菜单 -->
-                <div
-                    class="menu-item has-children"
-                    :class="{ active: isMenuActive(menu) }"
-                    @click="toggleMenu(menu.id)"
-                >
+          <!-- 使用 Element Plus 菜单组件 -->
+          <el-menu
+              :default-active="activeMenu"
+              :collapse="sidebarCollapsed"
+              background-color="#2c3e50"
+              text-color="rgba(255, 255, 255, 0.8)"
+              active-text-color="#ffffff"
+              unique-opened
+              router
+              class="el-menu-vertical"
+          >
+            <template v-for="menu in menus" :key="menu.id">
+              <!-- 有子菜单的项 -->
+              <el-sub-menu
+                  v-if="menu.children && menu.children.length > 0"
+                  :index="menu.id"
+              >
+
+                <template #title>
                   <i :class="menu.icon"></i>
                   <span v-if="!sidebarCollapsed">{{ menu.name }}</span>
-                  <i
-                      v-if="!sidebarCollapsed"
-                      class="arrow-icon"
-                      :class="{ 'rotated': !collapsedMenus[menu.id] }"
-                  >▼</i>
-                </div>
-
-                <!-- 子菜单 -->
-                <ul
-                    v-if="!sidebarCollapsed"
-                    class="submenu"
-                    :class="{ collapsed: collapsedMenus[menu.id] }"
+                </template>
+                <el-menu-item
+                    v-for="child in menu.children"
+                    :key="child.id"
+                    :index="child.path"
                 >
-                  <li v-for="child in menu.children" :key="child.id">
-                    <router-link
-                        :to="child.path"
-                        active-class="active"
-                        :title="child.name"
-                    >
-                      <i :class="child.icon"></i>
-                      <span>{{ child.name }}</span>
-                    </router-link>
-                  </li>
-                </ul>
-              </div>
+                  <i :class="child.icon"></i>
+                  <template #title>
+                    <span>{{ child.name }}</span>
+                  </template>
+                </el-menu-item>
+              </el-sub-menu>
 
-              <router-link
+              <!-- 无子菜单的项 -->
+              <el-menu-item
                   v-else
-                  :to="menu.path"
-                  active-class="active"
-                  :title="menu.name"
+                  :index="menu.path"
               >
                 <i :class="menu.icon"></i>
-                <span v-if="!sidebarCollapsed">{{ menu.name }}</span>
-              </router-link>
-            </li>
-          </ul>
+                <template #title>
+                  <span v-if="!sidebarCollapsed">{{ menu.name }}</span>
+                </template>
+              </el-menu-item>
+            </template>
+          </el-menu>
         </nav>
       </aside>
 
@@ -137,7 +135,7 @@
 <script>
 import menuService from '@/utils/menuService';
 import {menuIconCSS} from '@/config/menus'
-import {computed, onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, ref} from 'vue'
 import {useRoute, useRouter} from 'vue-router'
 
 export default {
@@ -147,7 +145,6 @@ export default {
     const router = useRouter()
 
     const sidebarCollapsed = ref(false)
-    const collapsedMenus = reactive({}) // 用于跟踪每个一级菜单的展开/收缩状态
     const currentUser = ref({})
     const username = ref('')
     const userRole = ref('user')
@@ -172,6 +169,11 @@ export default {
         '/settings': '系统设置'
       };
       return routeMap[route.path] || '管理系统';
+    })
+
+    // 计算当前激活的菜单项
+    const activeMenu = computed(() => {
+      return route.path;
     })
 
     // Toast 相关方法
@@ -245,15 +247,6 @@ export default {
       sidebarCollapsed.value = !sidebarCollapsed.value;
     };
 
-    // 切换一级菜单的展开/收缩状态
-    const toggleMenu = (menuId) => {
-      // 如果侧边栏是收缩状态，不处理菜单展开/收缩
-      if (sidebarCollapsed.value) return;
-
-      // 使用 Vue 3 的响应式系统直接设置属性
-      collapsedMenus[menuId] = !collapsedMenus[menuId];
-    };
-
     // 检查菜单是否激活
     const isMenuActive = (menu) => {
       // 检查当前路由是否匹配该菜单或其子菜单
@@ -287,7 +280,6 @@ export default {
         if (cachedMenus) {
           try {
             menus.value = JSON.parse(cachedMenus);
-            initCollapsedMenus();
             return;
           } catch (e) {
             console.error('解析缓存菜单失败', e);
@@ -298,22 +290,10 @@ export default {
         const menusData = await menuService.getUserMenus();
         if (menusData && menusData.length > 0) {
           menus.value = menusData;
-          initCollapsedMenus();
         }
       } catch (error) {
         console.error('加载用户菜单失败:', error);
       }
-    };
-
-    // 初始化菜单展开/收缩状态
-    const initCollapsedMenus = () => {
-      // 默认所有一级菜单都是收缩的
-      menus.value.forEach(menu => {
-        if (menu.children && menu.children.length > 0) {
-          // 使用 Vue 3 的响应式系统直接设置属性
-          collapsedMenus[menu.id] = true;
-        }
-      });
     };
 
     const handleLogout = () => {
@@ -357,7 +337,6 @@ export default {
 
     return {
       sidebarCollapsed,
-      collapsedMenus,
       currentUser,
       username,
       userRole,
@@ -370,6 +349,7 @@ export default {
       confirmConfirmText,
       confirmCancelText,
       currentPageTitle,
+      activeMenu,
       // 方法
       showToast,
       removeToast,
@@ -379,7 +359,6 @@ export default {
       handleConfirmCancel,
       getModalIconClass,
       toggleSidebar,
-      toggleMenu,
       isMenuActive,
       handleLogout
     }
@@ -655,7 +634,7 @@ html, body {
 }
 
 .sidebar.collapsed {
-  width: 70px;
+  width: 64px;
 }
 
 .sidebar-header {
@@ -684,97 +663,48 @@ html, body {
   overflow-y: auto;
 }
 
-.sidebar-nav ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+/* Element Plus 菜单样式调整 */
+.el-menu-vertical {
+  border-right: none !important;
 }
 
-.sidebar-nav li {
-  margin: 0;
+.el-menu-vertical:not(.el-menu--collapse) {
+  width: 250px;
 }
 
-.sidebar-nav > ul > li {
-  margin: 5px 0;
+.el-sub-menu__title * {
+  margin-left: 10px;
 }
 
-/* 一级菜单项样式 */
-.menu-item {
-  display: flex;
-  align-items: center;
-  padding: 15px 20px;
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
-  transition: all 0.3s;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.menu-item:hover,
-.menu-item.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-}
-
-.menu-item.has-children {
-  justify-content: space-between;
-}
-
-.sidebar-nav a {
-  display: flex;
-  align-items: center;
-  padding: 15px 20px;
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
-  transition: all 0.3s;
-  white-space: nowrap;
-}
-
-.sidebar-nav a:hover,
-.sidebar-nav a.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-}
-
-.sidebar-nav i {
-  font-size: 1.2rem;
-  width: 24px;
-  text-align: center;
-  margin-right: 15px;
-}
-
-/* 箭头图标 */
-.arrow-icon {
-  margin-left: auto;
-  margin-right: 0;
-  transition: transform 0.3s ease;
-  font-size: 0.8rem;
-}
-
-.arrow-icon.rotated {
-  transform: rotate(180deg);
-}
-
-/* 子菜单样式 */
-.submenu {
-  padding-left: 0;
-  background: rgba(0, 0, 0, 0.2);
-  max-height: 1000px;
+.el-menu--collapse .el-sub-menu__title span,
+.el-menu--collapse .el-menu-item span {
+  height: 0;
+  width: 0;
   overflow: hidden;
-  transition: max-height 0.3s ease;
+  visibility: hidden;
+  display: inline-block;
 }
 
-.submenu.collapsed {
-  max-height: 0;
+.el-menu--collapse .el-sub-menu__title .el-sub-menu__icon-arrow,
+.el-menu--collapse .el-menu-item .el-sub-menu__icon-arrow {
+  display: none;
 }
 
-.submenu li {
-  margin: 0;
+.el-menu-item, .el-sub-menu__title {
+  height: 50px !important;
+  line-height: 50px !important;
 }
 
-.submenu a {
-  padding: 12px 20px 12px 54px;
-  font-size: 0.9rem;
+.el-menu-item i, .el-sub-menu__title i {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.el-menu-item:hover, .el-sub-menu__title:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.el-menu-item.is-active {
+  background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* 主内容区域 */

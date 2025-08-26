@@ -12,18 +12,35 @@
       <!-- 模板列表 -->
       <el-table :data="templates" style="width: 100%" v-loading="loading" border>
         <el-table-column prop="id" label="ID" width="80"/>
-        <el-table-column prop="name" label="模板名称" width="180"/>
-        <el-table-column prop="method" label="计费方式" width="120">
+        <el-table-column prop="templateName" label="模板名称" width="180"/>
+        <el-table-column prop="valuationType" label="计费方式" width="120">
           <template #default="scope">
-            {{ scope.row.method === 'weight' ? '按重量' : '按件数' }}
+            {{ scope.row.valuationType === 1 ? '按件数' : '按重量' }}
           </template>
         </el-table-column>
-        <el-table-column prop="defaultFee" label="默认运费" width="120">
+        <el-table-column prop="firstFee" label="首费" width="120">
           <template #default="scope">
-            ¥{{ scope.row.defaultFee }}
+            ¥{{ scope.row.firstFee }}
           </template>
         </el-table-column>
-        <el-table-column prop="description" label="描述"/>
+        <el-table-column prop="additionalFee" label="续费" width="120">
+          <template #default="scope">
+            ¥{{ scope.row.additionalFee }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="freeShippingAmount" label="包邮金额" width="120">
+          <template #default="scope">
+            <span v-if="scope.row.freeShippingAmount">¥{{ scope.row.freeShippingAmount }}</span>
+            <span v-else>不包邮</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="scope.row.status === 1 ? 'success' : 'info'">
+              {{ scope.row.status === 1 ? '启用' : '禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="scope">
             <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
@@ -59,26 +76,37 @@
           ref="templateFormRef"
           label-width="120px"
       >
-        <el-form-item label="模板名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入模板名称"/>
+        <el-form-item label="模板名称" prop="templateName">
+          <el-input v-model="form.templateName" placeholder="请输入模板名称"/>
         </el-form-item>
-        <el-form-item label="计费方式" prop="method">
-          <el-radio-group v-model="form.method">
-            <el-radio label="weight">按重量计费</el-radio>
-            <el-radio label="quantity">按件数计费</el-radio>
+        <el-form-item label="计费方式" prop="valuationType">
+          <el-radio-group v-model="form.valuationType">
+            <el-radio :label="1">按件数计费</el-radio>
+            <el-radio :label="2">按重量计费</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item label="默认运费" prop="defaultFee">
-          <el-input v-model.number="form.defaultFee" placeholder="请输入默认运费">
+        <el-form-item label="首费" prop="firstFee">
+          <el-input v-model.number="form.firstFee" placeholder="请输入首费">
             <template #prepend>¥</template>
           </el-input>
         </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input
-              v-model="form.description"
-              type="textarea"
-              placeholder="请输入模板描述"
-              :rows="3"
+        <el-form-item label="续费" prop="additionalFee">
+          <el-input v-model.number="form.additionalFee" placeholder="请输入续费">
+            <template #prepend>¥</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="包邮金额" prop="freeShippingAmount">
+          <el-input v-model.number="form.freeShippingAmount" placeholder="请输入包邮金额(留空表示不包邮)">
+            <template #prepend>¥</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-switch
+              v-model="form.status"
+              :active-value="1"
+              :inactive-value="0"
+              active-text="启用"
+              inactive-text="禁用"
           />
         </el-form-item>
       </el-form>
@@ -117,23 +145,29 @@ export default {
     // 模板表单
     const form = reactive({
       id: null,
-      name: '',
-      method: 'weight',
-      defaultFee: 0,
-      description: ''
+      templateName: '',
+      valuationType: 1, // 1: 按件数, 2: 按重量
+      firstFee: 0,
+      additionalFee: 0,
+      freeShippingAmount: null,
+      status: 1 // 1: 启用, 0: 禁用
     });
 
     // 表单验证规则
     const templateRules = {
-      name: [
+      templateName: [
         {required: true, message: '请输入模板名称', trigger: 'blur'}
       ],
-      method: [
+      valuationType: [
         {required: true, message: '请选择计费方式', trigger: 'change'}
       ],
-      defaultFee: [
-        {required: true, message: '请输入默认运费', trigger: 'blur'},
-        {type: 'number', message: '运费必须为数字', trigger: 'blur'}
+      firstFee: [
+        {required: true, message: '请输入首费', trigger: 'blur'},
+        {type: 'number', message: '首费必须为数字', trigger: 'blur'}
+      ],
+      additionalFee: [
+        {required: true, message: '请输入续费', trigger: 'blur'},
+        {type: 'number', message: '续费必须为数字', trigger: 'blur'}
       ]
     };
 
@@ -146,14 +180,16 @@ export default {
       loading.value = true;
       try {
         const params = {
-          page: pagination.currentPage,
+          current: pagination.currentPage,
           size: pagination.pageSize
         };
 
         const result = await shippingService.getTemplates(params);
         if (result.code === 0) {
-          templates.value = result.data.list || [];
+          templates.value = result.data.records || [];
           pagination.total = result.data.total || 0;
+          pagination.currentPage = result.data.current || 1;
+          pagination.pageSize = result.data.size || 10;
         } else {
           ElMessage.error(result.msg || '获取模板列表失败');
         }
@@ -171,10 +207,12 @@ export default {
       // 重置表单
       Object.assign(form, {
         id: null,
-        name: '',
-        method: 'weight',
-        defaultFee: 0,
-        description: ''
+        templateName: '',
+        valuationType: 1,
+        firstFee: 0,
+        additionalFee: 0,
+        freeShippingAmount: null,
+        status: 1
       });
     };
 
@@ -184,17 +222,19 @@ export default {
       dialogVisible.value = true;
       Object.assign(form, {
         id: row.id,
-        name: row.name,
-        method: row.method,
-        defaultFee: row.defaultFee,
-        description: row.description
+        templateName: row.templateName,
+        valuationType: row.valuationType,
+        firstFee: row.firstFee,
+        additionalFee: row.additionalFee,
+        freeShippingAmount: row.freeShippingAmount,
+        status: row.status
       });
     };
 
     // 删除模板
     const handleDelete = (row) => {
       ElMessageBox.confirm(
-          `确定要删除运费模板 "${row.name}" 吗？`,
+          `确定要删除运费模板 "${row.templateName}" 吗？`,
           '确认删除',
           {
             confirmButtonText: '确定',
@@ -226,17 +266,23 @@ export default {
         if (valid) {
           submitLoading.value = true;
           try {
+            // 处理表单数据
+            const submitForm = {...form};
+            if (submitForm.freeShippingAmount === '') {
+              submitForm.freeShippingAmount = null;
+            }
+
             let result;
             if (isEditMode.value) {
-              result = await shippingService.updateTemplate(form);
+              result = await shippingService.updateTemplate(submitForm);
             } else {
-              result = await shippingService.createTemplate(form);
+              result = await shippingService.createTemplate(submitForm);
             }
 
             if (result.code === 0) {
               ElMessage.success(`${isEditMode.value ? '更新' : '创建'}成功`);
               dialogVisible.value = false;
-              fetchTemplates();
+              await fetchTemplates();
             } else {
               ElMessage.error(result.msg || `${isEditMode.value ? '更新' : '创建'}失败`);
             }
