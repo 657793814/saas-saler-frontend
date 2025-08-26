@@ -43,6 +43,26 @@ class SpecService {
             throw error;
         }
     }
+
+    async batchAddSpecValues(data) {
+        try {
+            const result = await apiRequest.post(`/api/products/batch_add_spec_value`, data);
+            return result;
+        } catch (error) {
+            console.error('批量新增规格值错误:', error);
+            throw error;
+        }
+    }
+
+    async createSpecification(data) {
+        try {
+            const result = await apiRequest.post(`/api/products/batch_add_spec`, data);
+            return result;
+        } catch (error) {
+            console.error('批量新增规格错误:', error);
+            throw error;
+        }
+    }
 }
 
 const specService = new SpecService();

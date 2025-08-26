@@ -234,7 +234,7 @@ export default {
 
     // 新增商品
     const handleAdd = () => {
-      router.push('/products/create');
+      router.push('/products/product-create');
     };
 
     // 编辑商品
