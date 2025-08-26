@@ -101,7 +101,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column prop="specTypeId" label="ID" width="80"/>
+        <!--        <el-table-column prop="specTypeId" label="ID" width="80"/>-->
         <el-table-column prop="specTypeName" label="规格名称" width="180"/>
         <el-table-column label="规格值数量" width="120">
           <template #default="scope">
