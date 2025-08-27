@@ -1,4 +1,3 @@
-<!-- src/views/products/ProductList.vue -->
 <template>
   <div class="product-list">
     <el-card>
@@ -44,7 +43,6 @@
                 border
                 class="sku-table"
             >
-              <!--              <el-table-column prop="skuId" label="SKU ID" width="100"/>-->
               <el-table-column prop="code" label="商品code" width="200"/>
               <el-table-column prop="spec" label="规格" width="200"/>
               <el-table-column prop="price" label="销售价" width="120">
@@ -65,7 +63,7 @@
                       :src="scope.row.imgUrl"
                       class="sku-preview"
                       fit="cover"
-                      :preview-src-list="[scope.row.imgUrl]"
+                      @click="showImagePreview(scope.row.imgUrl)"
                   />
                   <span v-else>无图片</span>
                 </template>
@@ -92,7 +90,6 @@
           </template>
         </el-table-column>
 
-        <!--        <el-table-column prop="productId" label="商品ID" width="80"/>-->
         <el-table-column prop="name" label="产品名称" min-width="200"/>
         <el-table-column prop="code" label="产品code" min-width="200"/>
         <el-table-column label="SKU数量" width="100">
@@ -110,7 +107,7 @@
                 :src="scope.row.imgUrl"
                 class="sku-preview"
                 fit="cover"
-                :preview-src-list="[scope.row.imgUrl]"
+                @click="showImagePreview(scope.row.imgUrl)"
             />
             <span v-else>无图片</span>
           </template>
@@ -138,13 +135,6 @@
             >
               编辑
             </el-button>
-            <!--            <el-button-->
-            <!--                size="small"-->
-            <!--                type="danger"-->
-            <!--                @click="handleDelete(scope.row)"-->
-            <!--            >-->
-            <!--              删除-->
-            <!--            </el-button>-->
           </template>
         </el-table-column>
       </el-table>
@@ -162,8 +152,17 @@
         />
       </div>
     </el-card>
+
+    <!-- 自定义图片预览模态框 -->
+    <div v-if="imagePreviewVisible" class="custom-image-preview" @click="closeImagePreview">
+      <div class="preview-content" @click.stop>
+        <img :src="previewImageUrl" alt="预览图片" class="preview-image"/>
+        <el-button type="primary" icon="Close" circle class="close-btn" @click="closeImagePreview"/>
+      </div>
+    </div>
   </div>
 </template>
+
 
 <script>
 import {onMounted, reactive, ref} from 'vue';
@@ -329,6 +328,26 @@ export default {
       fetchProducts();
     };
 
+    // 图片预览相关
+    const imagePreviewVisible = ref(false);
+    const previewImageUrl = ref('');
+
+    // 显示图片预览
+    const showImagePreview = (url) => {
+      previewImageUrl.value = url;
+      imagePreviewVisible.value = true;
+      // 禁止body滚动
+      document.body.style.overflow = 'hidden';
+    };
+
+    // 关闭图片预览
+    const closeImagePreview = () => {
+      imagePreviewVisible.value = false;
+      previewImageUrl.value = '';
+      // 恢复body滚动
+      document.body.style.overflow = '';
+    };
+
     onMounted(() => {
       fetchProducts();
     });
@@ -350,7 +369,13 @@ export default {
       toggleSkuStatus,
       handleExpandChange,
       handleSizeChange,
-      handleCurrentChange
+      handleCurrentChange,
+
+      // 图片预览相关
+      imagePreviewVisible,
+      previewImageUrl,
+      showImagePreview,
+      closeImagePreview
     };
   }
 };
@@ -386,8 +411,40 @@ export default {
   border-radius: 4px;
 }
 
-.dialog-footer {
-  text-align: right;
+
+/* 自定义图片预览样式 */
+.custom-image-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  z-index: 9999999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.preview-content {
+  position: relative;
+  max-width: 90%;
+  max-height: 90%;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+}
+
+.close-btn {
+  position: absolute;
+  top: -40px;
+  right: -40px;
 }
 </style>
+
+
+
 
