@@ -5,9 +5,6 @@ WORKDIR /app
 RUN npm install && npm run build
 
 FROM nginx
-RUN mkdir /app
-# 使用命名阶段引用docker
-COPY --from=builder /app/dist /app
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # 方案2 构建一个基础的node+nginx镜像 配合 docker-compose使用。 docker build -t node-web-base . 。
