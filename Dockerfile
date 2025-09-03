@@ -1,9 +1,5 @@
 # 方案1 直接构建服务镜像
 FROM node:21 AS builder
-COPY ./ /app
-WORKDIR /app
-RUN npm install && npm run build
-
 FROM nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 
