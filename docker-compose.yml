@@ -6,7 +6,8 @@ networks:
 
 services:
   web:
-    build: .
+    #build: .  #自动查找项目中的dockerfile构建基础镜像
+    image: node-nginx-base
     container_name: saas-saler-web
     ports:
       - "8090:80"
