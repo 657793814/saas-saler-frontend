@@ -85,8 +85,9 @@ class ApiRequest {
                 finalHeaders['header_tenant_code'] = tenant_code;
             }
 
-            //sign 相关参数
+            //url 相关参数
             const params = new URLSearchParams({
+                tenant_code,
                 token,
                 rand_str,
                 sign,
