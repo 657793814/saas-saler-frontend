@@ -886,7 +886,7 @@ export default {
           body: formData,
           headers: {
             // 不设置 Content-Type，让浏览器自动设置 multipart/form-data 及 boundary
-            'header_tenant_code': tenant_code || ''
+            'Header_tenant_code': tenant_code || ''
           }
         });
 
