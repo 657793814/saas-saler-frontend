@@ -1,0 +1,22 @@
+version: '3.8'
+
+networks:
+  monitor:
+    external: true
+
+services:
+  web:
+    build: .
+    container_name: saas-saler-web
+    ports:
+      - "8090:80"
+    networks:
+      - monitor
+    volumes:
+      - .:/app  # 挂载整个项目目录
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./start.sh:/app/start.sh
+    working_dir: /app
+    command: [ "sh","-c","./start.sh" ]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
